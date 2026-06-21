@@ -12,3 +12,21 @@ export interface Track {
   color: string;
   waypoints: Waypoint[];
 }
+
+export interface NavSettings {
+  showCounter: boolean;      // "3 / 7"
+  showLabel: boolean;        // waypoint label below distance
+  showOdometer: boolean;     // cumulative km along route
+  showNextPreview: boolean;  // next waypoint arrow + distance
+  audioApproach: boolean;    // beep at 150 m
+  audioCrossed: boolean;     // double-beep when waypoint crossed
+}
+
+export const DEFAULT_NAV_SETTINGS: NavSettings = {
+  showCounter: true,
+  showLabel: true,
+  showOdometer: true,
+  showNextPreview: true,
+  audioApproach: true,
+  audioCrossed: true,
+};

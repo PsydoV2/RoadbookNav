@@ -14,7 +14,11 @@ type State =
   | { kind: 'ios' }
   | { kind: 'manual' };
 
-export default function InstallPwa() {
+interface InstallPwaProps {
+  compact?: boolean;
+}
+
+export default function InstallPwa({ compact = false }: InstallPwaProps) {
   const [state, setState] = useState<State>({ kind: 'checking' });
 
   useEffect(() => {
@@ -65,32 +69,55 @@ export default function InstallPwa() {
 
   if (state.kind === 'installed') {
     return (
-      <div className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white/5 border border-white/20 text-green-400 text-sm font-medium">
-        <svg viewBox="0 0 16 16" width={14} height={14} fill="none">
+      <div className="inline-flex items-center gap-2 px-7 py-4 rounded-xl bg-white/5 border border-white/15 text-green-400 text-base font-bold">
+        <svg viewBox="0 0 16 16" width={13} height={13} fill="none">
           <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" />
           <path d="M5 8l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        Already installed
+        {compact ? 'Installed' : 'Already installed'}
       </div>
     );
   }
 
+  const DownloadIcon = () => (
+    <svg viewBox="0 0 16 16" width={14} height={14} fill="none">
+      <path d="M8 2v7M8 9l-3-2.5M8 9l3-2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+
   if (state.kind === 'promptable') {
-    return (
+    return compact ? (
+      <button
+        onClick={handleInstall}
+        className="inline-flex items-center gap-2 px-7 py-4 border border-white/25 text-white text-base font-bold rounded-xl hover:bg-white/5 active:scale-95 transition-all"
+      >
+        <DownloadIcon />
+        Install app
+      </button>
+    ) : (
       <button
         onClick={handleInstall}
         className="inline-flex items-center gap-2.5 px-6 py-3.5 bg-white text-black font-bold text-sm rounded-xl hover:bg-gray-100 active:scale-95 transition-all"
       >
-        <svg viewBox="0 0 16 16" width={15} height={15} fill="none">
-          <path d="M8 2v8M8 10l-3-3M8 10l3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
+        <DownloadIcon />
         Install app
       </button>
     );
   }
 
   if (state.kind === 'ios') {
+    if (compact) {
+      return (
+        <a
+          href="#install"
+          className="inline-flex items-center gap-2 px-7 py-4 border border-white/25 text-white text-base font-bold rounded-xl hover:bg-white/5 transition-colors"
+        >
+          <DownloadIcon />
+          Add to Home Screen ↓
+        </a>
+      );
+    }
     return (
       <div className="flex flex-col gap-3">
         <p className="text-gray-400 text-sm">On iOS Safari:</p>
@@ -112,7 +139,18 @@ export default function InstallPwa() {
     );
   }
 
-  // manual fallback (Chrome desktop, Firefox, etc.)
+  // manual fallback
+  if (compact) {
+    return (
+      <a
+        href="#install"
+        className="inline-flex items-center gap-2 px-7 py-4 border border-white/25 text-white text-base font-bold rounded-xl hover:bg-white/5 transition-colors"
+      >
+        <DownloadIcon />
+        Install app ↓
+      </a>
+    );
+  }
   return (
     <p className="text-gray-400 text-sm">
       Open browser menu → <span className="text-white">Install app</span> or{' '}

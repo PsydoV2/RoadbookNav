@@ -53,17 +53,18 @@ export default function Home() {
             A bare-minimum roadbook display for motorcycle trips. Plan waypoints at home,
             export a JSON, import on your phone, ride. No live maps. No accounts. No tracking.
           </p>
-          <div className="flex items-center gap-4 mt-2">
+          <div className="flex flex-wrap items-center gap-3 mt-2">
             <Link
               href="/app/"
               className="px-7 py-4 bg-white text-black font-bold text-base rounded-xl hover:bg-gray-100 active:scale-95 transition-all"
             >
               Open the app →
             </Link>
-            <a href="#how-it-works" className="text-gray-500 text-sm hover:text-gray-300 transition-colors">
-              How it works ↓
-            </a>
+            <InstallPwa compact />
           </div>
+          <a href="#how-it-works" className="text-gray-600 text-xs mt-3 hover:text-gray-400 transition-colors inline-block">
+            How it works ↓
+          </a>
         </div>
 
         {/* Phone mockup */}
@@ -144,7 +145,7 @@ export default function Home() {
       </section>
 
       {/* ── Install ── */}
-      <section className="border-t border-white/10 py-24 px-8">
+      <section id="install" className="border-t border-white/10 py-24 px-8">
         <div className="max-w-3xl mx-auto grid md:grid-cols-2 gap-16 items-start">
           <div className="flex flex-col gap-5">
             <p className="text-gray-500 text-sm uppercase tracking-widest">Install it before you leave</p>

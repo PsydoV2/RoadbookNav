@@ -40,6 +40,26 @@ const ARROW_FILE: Partial<Record<Waypoint['arrowType'], string>> = {
   'u-turn':       '/arrows/arrow-down-sm-svgrepo-com.svg',
 };
 
+// ── Button style tokens ──────────────────────────────────────────────────────
+//
+// Every interactive element uses one of these six canonical classes.
+// Same category → same hover behaviour, everywhere.
+
+// Dark ghost: toolbar Import / Export / ☰
+const BTN_GHOST     = 'cursor-pointer bg-[#2a2a2a] border border-white/25 rounded-lg text-white transition-colors hover:bg-[#3d3d3d] active:bg-[#333] disabled:opacity-35 disabled:pointer-events-none';
+// White primary: Navigate →, Add, Save
+const BTN_PRIMARY   = 'cursor-pointer bg-white text-black font-bold rounded-lg transition-all hover:bg-gray-200 active:scale-95 disabled:opacity-35 disabled:pointer-events-none';
+// Outline secondary: Cancel in modals
+const BTN_CANCEL    = 'cursor-pointer border border-white/25 rounded-xl text-gray-200 transition-colors hover:bg-white/10 active:bg-white/15';
+// Destructive: Delete in edit modal
+const BTN_DELETE    = 'cursor-pointer bg-red-500/15 border border-red-500/35 text-red-400 font-bold rounded-xl transition-colors hover:bg-red-500/30 active:bg-red-500/40';
+// Arrow-type selector (inactive state only; active gets bg-white text-black)
+const BTN_ARROW_OFF = 'bg-[#2a2a2a] text-white transition-colors hover:bg-[#3d3d3d] active:bg-[#333]';
+// Icon-only ✕ buttons
+const BTN_ICON_DEL  = 'cursor-pointer text-gray-400 transition-colors hover:text-red-400 active:text-red-500';
+
+// ── ArrowIcon ────────────────────────────────────────────────────────────────
+
 function ArrowIcon({ type, active, size = 20 }: { type: Waypoint['arrowType']; active: boolean; size?: number }) {
   const file = ARROW_FILE[type];
   if (file) {
@@ -54,7 +74,6 @@ function ArrowIcon({ type, active, size = 20 }: { type: Waypoint['arrowType']; a
       />
     );
   }
-  // start / finish: inline SVG fallback
   if (type === 'start') {
     return (
       <svg viewBox="0 0 24 24" width={size} height={size} fill="none">
@@ -88,7 +107,7 @@ function createTrack(tracks: Track[]): Track {
   };
 }
 
-function makeMarkerIcon(index: number, color: string, isActive: boolean) {
+function makeMarkerIcon(index: number, color: string, isActive: boolean, isDraggable: boolean) {
   const size = isActive ? 28 : 20;
   return L.divIcon({
     className: '',
@@ -101,6 +120,7 @@ function makeMarkerIcon(index: number, color: string, isActive: boolean) {
       border:2px solid rgba(255,255,255,0.85);
       box-shadow:0 1px 5px rgba(0,0,0,0.6);
       opacity:${isActive ? 1 : 0.55};
+      cursor:${isDraggable ? 'grab' : 'pointer'};
     ">${index + 1}</div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
@@ -146,14 +166,43 @@ function ClickHandler({ onMapClick }: ClickHandlerProps) {
   return null;
 }
 
-interface ModalProps {
+// Arrow-type grid shared by both modals
+function ArrowGrid({
+  value,
+  onChange,
+}: {
+  value: Waypoint['arrowType'];
+  onChange: (t: Waypoint['arrowType']) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {ARROW_TYPES.map((type) => {
+        const active = value === type;
+        return (
+          <button
+            key={type}
+            onClick={() => onChange(type)}
+            className={`cursor-pointer flex items-center gap-2 px-3 py-3 rounded-xl text-sm font-medium ${
+              active ? 'bg-white text-black' : BTN_ARROW_OFF
+            }`}
+          >
+            <ArrowIcon type={type} active={active} size={18} />
+            {ARROW_LABELS[type]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+interface AddModalProps {
   lat: number;
   lon: number;
   isFirst: boolean;
   onConfirm: (label: string, arrowType: Waypoint['arrowType']) => void;
   onCancel: () => void;
 }
-function WaypointModal({ lat, lon, isFirst, onConfirm, onCancel }: ModalProps) {
+function WaypointAddModal({ lat, lon, isFirst, onConfirm, onCancel }: AddModalProps) {
   const [label, setLabel] = useState('');
   const [arrowType, setArrowType] = useState<Waypoint['arrowType']>(isFirst ? 'start' : 'straight');
 
@@ -172,39 +221,72 @@ function WaypointModal({ lat, lon, isFirst, onConfirm, onCancel }: ModalProps) {
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && onConfirm(label.trim(), arrowType)}
-          className="w-full bg-[#111] border border-white/30 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white/60"
+          className="w-full bg-[#111] border border-white/30 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white/60 transition-colors"
         />
 
-        <div className="grid grid-cols-2 gap-2">
-          {ARROW_TYPES.map((type) => {
-            const active = arrowType === type;
-            return (
-              <button
-                key={type}
-                onClick={() => setArrowType(type)}
-                className={`flex items-center gap-2 px-3 py-3 rounded-xl text-sm font-medium transition-colors ${
-                  active ? 'bg-white text-black' : 'bg-[#2a2a2a] text-white hover:bg-[#333] active:bg-[#333]'
-                }`}
-              >
-                <ArrowIcon type={type} active={active} size={18} />
-                {ARROW_LABELS[type]}
-              </button>
-            );
-          })}
-        </div>
+        <ArrowGrid value={arrowType} onChange={setArrowType} />
 
         <div className="flex gap-3">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-3 rounded-xl border border-white/25 text-gray-200 hover:bg-white/5 active:bg-white/10"
-          >
+          <button onClick={onCancel} className={`flex-1 py-3 px-4 ${BTN_CANCEL}`}>
             Cancel
           </button>
           <button
             onClick={() => onConfirm(label.trim(), arrowType)}
-            className="flex-1 py-3 rounded-xl bg-white text-black font-bold active:scale-95 transition-transform"
+            className={`flex-1 py-3 px-4 ${BTN_PRIMARY}`}
           >
             Add
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface EditModalProps {
+  waypoint: Waypoint;
+  index: number;
+  onSave: (label: string, arrowType: Waypoint['arrowType']) => void;
+  onDelete: () => void;
+  onCancel: () => void;
+}
+function WaypointEditModal({ waypoint, index, onSave, onDelete, onCancel }: EditModalProps) {
+  const [label, setLabel] = useState(waypoint.label);
+  const [arrowType, setArrowType] = useState<Waypoint['arrowType']>(waypoint.arrowType);
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-end md:items-center justify-center bg-black/80 p-4">
+      <div className="bg-[#1a1a1a] border border-white/25 rounded-2xl w-full max-w-sm p-6 flex flex-col gap-5">
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="font-bold text-lg text-white">Waypoint #{index + 1}</h2>
+          <span className="text-xs text-gray-400 font-mono mt-1 text-right">
+            {waypoint.lat.toFixed(5)}<br />{waypoint.lon.toFixed(5)}
+          </span>
+        </div>
+
+        <input
+          autoFocus
+          type="text"
+          placeholder="Label (optional)"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onSave(label.trim(), arrowType)}
+          className="w-full bg-[#111] border border-white/30 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white/60 transition-colors"
+        />
+
+        <ArrowGrid value={arrowType} onChange={setArrowType} />
+
+        <div className="flex gap-2">
+          <button onClick={onCancel} className={`py-3 px-4 ${BTN_CANCEL}`}>
+            Cancel
+          </button>
+          <button onClick={onDelete} className={`py-3 px-4 ${BTN_DELETE}`}>
+            Delete
+          </button>
+          <button
+            onClick={() => onSave(label.trim(), arrowType)}
+            className={`flex-1 py-3 px-4 ${BTN_PRIMARY}`}
+          >
+            Save
           </button>
         </div>
       </div>
@@ -222,14 +304,18 @@ interface Props {
 }
 
 interface Pending { lat: number; lon: number }
+interface EditingWaypoint { trackId: string; waypoint: Waypoint; index: number }
 
 export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavigation }: Props) {
   const [pending, setPending] = useState<Pending | null>(null);
+  const [editingWaypoint, setEditingWaypoint] = useState<EditingWaypoint | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  // Prevents click firing right after a drag ends
+  const isDraggingRef = useRef(false);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -301,6 +387,48 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
     );
     onChange(updated, activeTrackId);
     setPending(null);
+  };
+
+  const handleMoveWaypoint = (trackId: string, wpId: string, lat: number, lon: number) => {
+    onChange(
+      tracks.map((t) =>
+        t.id === trackId
+          ? { ...t, waypoints: t.waypoints.map((w) => w.id === wpId ? { ...w, lat, lon } : w) }
+          : t,
+      ),
+      activeTrackId,
+    );
+  };
+
+  const handleSaveEditingWaypoint = (label: string, arrowType: Waypoint['arrowType']) => {
+    if (!editingWaypoint) return;
+    onChange(
+      tracks.map((t) =>
+        t.id === editingWaypoint.trackId
+          ? {
+              ...t,
+              waypoints: t.waypoints.map((w) =>
+                w.id === editingWaypoint.waypoint.id ? { ...w, label, arrowType } : w,
+              ),
+            }
+          : t,
+      ),
+      activeTrackId,
+    );
+    setEditingWaypoint(null);
+  };
+
+  const handleDeleteEditingWaypoint = () => {
+    if (!editingWaypoint) return;
+    onChange(
+      tracks.map((t) =>
+        t.id === editingWaypoint.trackId
+          ? { ...t, waypoints: t.waypoints.filter((w) => w.id !== editingWaypoint.waypoint.id) }
+          : t,
+      ),
+      activeTrackId,
+    );
+    setEditingWaypoint(null);
   };
 
   const handleDeleteWaypoint = (trackId: string, wpId: string, label: string) => {
@@ -383,37 +511,35 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
         <span className="font-bold text-sm whitespace-nowrap mr-1 text-white">Roadbook Nav</span>
 
         {/* Desktop: show all buttons inline */}
-        <div className="hidden sm:flex items-center gap-2">
+        <div className="hidden md:flex items-center gap-2">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333]"
+            className={`px-3 py-2 text-xs whitespace-nowrap ${BTN_GHOST}`}
           >
             ↑ Import
           </button>
-
           <button
             onClick={handleExport}
             disabled={!activeTrack || activeTrack.waypoints.length === 0}
-            className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333] disabled:opacity-35"
+            className={`px-3 py-2 text-xs whitespace-nowrap ${BTN_GHOST}`}
           >
             ↓ Export
           </button>
-
           <button
             onClick={handleExportAll}
             disabled={tracks.every((t) => t.waypoints.length === 0)}
-            className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333] disabled:opacity-35"
+            className={`px-3 py-2 text-xs whitespace-nowrap ${BTN_GHOST}`}
           >
             ↓ Export All
           </button>
         </div>
 
         {/* Mobile: dropdown menu for import/export */}
-        <div className="sm:hidden relative" ref={menuRef}>
+        <div className="md:hidden relative" ref={menuRef}>
           <button
             onClick={() => setMenuOpen((o) => !o)}
-            className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333]"
             aria-label="Open menu"
+            className={`px-3 py-2 text-xs ${BTN_GHOST}`}
           >
             ☰
           </button>
@@ -421,21 +547,21 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
             <div className="absolute left-0 top-full mt-1 z-[9999] flex flex-col gap-1 bg-[#1a1a1a] border border-white/20 rounded-lg p-2 min-w-[140px] shadow-lg">
               <button
                 onClick={() => { fileInputRef.current?.click(); setMenuOpen(false); }}
-                className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333] text-left"
+                className={`px-3 py-2 text-xs text-left whitespace-nowrap ${BTN_GHOST}`}
               >
                 ↑ Import
               </button>
               <button
                 onClick={() => { handleExport(); setMenuOpen(false); }}
                 disabled={!activeTrack || activeTrack.waypoints.length === 0}
-                className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333] disabled:opacity-35 text-left"
+                className={`px-3 py-2 text-xs text-left whitespace-nowrap ${BTN_GHOST}`}
               >
                 ↓ Export
               </button>
               <button
                 onClick={() => { handleExportAll(); setMenuOpen(false); }}
                 disabled={tracks.every((t) => t.waypoints.length === 0)}
-                className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333] disabled:opacity-35 text-left"
+                className={`px-3 py-2 text-xs text-left whitespace-nowrap ${BTN_GHOST}`}
               >
                 ↓ Export All
               </button>
@@ -449,7 +575,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
           <button
             onClick={() => activeTrackId && activeTrack && activeTrack.waypoints.length > 0 && onStartNavigation(activeTrackId)}
             disabled={!activeTrack || activeTrack.waypoints.length === 0}
-            className="px-4 py-2 text-sm font-bold bg-white text-black rounded-lg whitespace-nowrap disabled:opacity-35 active:scale-95 transition-transform"
+            className={`px-4 py-2 text-sm whitespace-nowrap ${BTN_PRIMARY}`}
           >
             Navigate →
           </button>
@@ -467,11 +593,11 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
               className={`group flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap cursor-pointer select-none transition-colors ${
                 isActive
                   ? 'bg-[#2a2a2a] text-white border border-white/20'
-                  : 'text-gray-300 hover:text-white hover:bg-[#222] border border-transparent'
+                  : 'text-gray-300 hover:text-white hover:bg-[#2a2a2a] border border-transparent'
               }`}
             >
               <span
-                className="w-2.5 h-2.5 rounded-full flex-shrink-0 flex-shrink-0"
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                 style={{ background: track.color }}
               />
               {editingId === track.id ? (
@@ -497,7 +623,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
               </span>
               <button
                 onClick={(e) => { e.stopPropagation(); handleDeleteTrack(track.id); }}
-                className="ml-0.5 text-gray-400 hover:text-red-400 active:text-red-400 text-xs"
+                className={`ml-0.5 text-xs ${BTN_ICON_DEL}`}
                 aria-label="Delete track"
               >
                 ✕
@@ -508,7 +634,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
 
         <button
           onClick={handleAddTrack}
-          className="flex-shrink-0 px-3 py-1.5 text-sm text-gray-300 hover:text-white transition-colors rounded-lg hover:bg-[#222]"
+          className="cursor-pointer flex-shrink-0 px-3 py-1.5 text-sm text-gray-300 rounded-lg transition-colors hover:text-white hover:bg-[#2a2a2a]"
         >
           + Track
         </button>
@@ -540,14 +666,24 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
                   <Marker
                     key={wp.id}
                     position={[wp.lat, wp.lon]}
-                    icon={makeMarkerIcon(i, track.color, isActive)}
+                    icon={makeMarkerIcon(i, track.color, isActive, isActive)}
+                    draggable={isActive}
                     eventHandlers={{
                       click: () => {
+                        if (isDraggingRef.current) return;
                         if (!isActive) {
                           handleSwitchTrack(track.id);
                         } else {
-                          handleDeleteWaypoint(track.id, wp.id, wp.label);
+                          setEditingWaypoint({ trackId: track.id, waypoint: wp, index: i });
                         }
+                      },
+                      dragstart: () => {
+                        isDraggingRef.current = true;
+                      },
+                      dragend: (e) => {
+                        const latlng = (e.target as L.Marker).getLatLng();
+                        handleMoveWaypoint(track.id, wp.id, latlng.lat, latlng.lng);
+                        setTimeout(() => { isDraggingRef.current = false; }, 50);
                       },
                     }}
                   />
@@ -589,7 +725,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
                 <ArrowIcon type={wp.arrowType} active={false} size={14} />
                 <button
                   onClick={() => handleDeleteWaypoint(activeTrack.id, wp.id, wp.label)}
-                  className="text-gray-400 hover:text-red-400 ml-0.5 transition-colors"
+                  className={`ml-0.5 ${BTN_ICON_DEL}`}
                   aria-label="Delete"
                 >
                   ✕
@@ -600,14 +736,25 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
         </div>
       )}
 
-      {/* ── Waypoint modal ── */}
+      {/* ── Add waypoint modal ── */}
       {pending && activeTrack && (
-        <WaypointModal
+        <WaypointAddModal
           lat={pending.lat}
           lon={pending.lon}
           isFirst={activeTrack.waypoints.length === 0}
           onConfirm={handleConfirm}
           onCancel={() => setPending(null)}
+        />
+      )}
+
+      {/* ── Edit waypoint modal ── */}
+      {editingWaypoint && (
+        <WaypointEditModal
+          waypoint={editingWaypoint.waypoint}
+          index={editingWaypoint.index}
+          onSave={handleSaveEditingWaypoint}
+          onDelete={handleDeleteEditingWaypoint}
+          onCancel={() => setEditingWaypoint(null)}
         />
       )}
     </div>

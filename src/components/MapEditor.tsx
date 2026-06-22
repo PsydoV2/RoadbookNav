@@ -227,7 +227,20 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
   const [pending, setPending] = useState<Pending | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
 
   // Auto-create first track if empty
   useEffect(() => {
@@ -366,33 +379,71 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
     <div className="w-screen h-screen bg-black flex flex-col">
 
       {/* ── Toolbar ── */}
-      <div className="flex items-center gap-2 px-4 py-3 bg-[#1a1a1a] border-b border-white/20 flex-shrink-0 overflow-x-auto">
+      <div className="flex items-center gap-2 px-4 py-3 bg-[#1a1a1a] border-b border-white/20 flex-shrink-0">
         <span className="font-bold text-sm whitespace-nowrap mr-1 text-white">Roadbook Nav</span>
 
+        {/* Desktop: show all buttons inline */}
+        <div className="hidden sm:flex items-center gap-2">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333]"
+          >
+            ↑ Import
+          </button>
 
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333]"
-        >
-          ↑ Import
-        </button>
+          <button
+            onClick={handleExport}
+            disabled={!activeTrack || activeTrack.waypoints.length === 0}
+            className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333] disabled:opacity-35"
+          >
+            ↓ Export
+          </button>
+
+          <button
+            onClick={handleExportAll}
+            disabled={tracks.every((t) => t.waypoints.length === 0)}
+            className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333] disabled:opacity-35"
+          >
+            ↓ Export All
+          </button>
+        </div>
+
+        {/* Mobile: dropdown menu for import/export */}
+        <div className="sm:hidden relative" ref={menuRef}>
+          <button
+            onClick={() => setMenuOpen((o) => !o)}
+            className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333]"
+            aria-label="Open menu"
+          >
+            ☰
+          </button>
+          {menuOpen && (
+            <div className="absolute left-0 top-full mt-1 z-[9999] flex flex-col gap-1 bg-[#1a1a1a] border border-white/20 rounded-lg p-2 min-w-[140px] shadow-lg">
+              <button
+                onClick={() => { fileInputRef.current?.click(); setMenuOpen(false); }}
+                className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333] text-left"
+              >
+                ↑ Import
+              </button>
+              <button
+                onClick={() => { handleExport(); setMenuOpen(false); }}
+                disabled={!activeTrack || activeTrack.waypoints.length === 0}
+                className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333] disabled:opacity-35 text-left"
+              >
+                ↓ Export
+              </button>
+              <button
+                onClick={() => { handleExportAll(); setMenuOpen(false); }}
+                disabled={tracks.every((t) => t.waypoints.length === 0)}
+                className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333] disabled:opacity-35 text-left"
+              >
+                ↓ Export All
+              </button>
+            </div>
+          )}
+        </div>
+
         <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
-
-        <button
-          onClick={handleExport}
-          disabled={!activeTrack || activeTrack.waypoints.length === 0}
-          className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333] disabled:opacity-35"
-        >
-          ↓ Track
-        </button>
-
-        <button
-          onClick={handleExportAll}
-          disabled={tracks.every((t) => t.waypoints.length === 0)}
-          className="px-3 py-2 text-xs bg-[#2a2a2a] border border-white/25 rounded-lg text-white whitespace-nowrap hover:bg-[#333] active:bg-[#333] disabled:opacity-35"
-        >
-          ↓ All
-        </button>
 
         <div className="ml-auto flex-shrink-0">
           <button
@@ -446,7 +497,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
               </span>
               <button
                 onClick={(e) => { e.stopPropagation(); handleDeleteTrack(track.id); }}
-                className="opacity-0 group-hover:opacity-100 ml-0.5 text-gray-400 hover:text-red-400 text-xs transition-opacity"
+                className="ml-0.5 text-gray-400 hover:text-red-400 active:text-red-400 text-xs"
                 aria-label="Delete track"
               >
                 ✕

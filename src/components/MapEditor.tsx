@@ -191,10 +191,18 @@ function ClickHandler({ onMapClick }: ClickHandlerProps) {
 // Location search using Nominatim
 function MapSearch() {
   const map = useMap();
+  const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      L.DomEvent.disableClickPropagation(containerRef.current);
+      L.DomEvent.disableScrollPropagation(containerRef.current);
+    }
+  }, []);
 
   const search = async () => {
     if (!query.trim()) return;
@@ -219,18 +227,20 @@ function MapSearch() {
 
   if (!open) {
     return (
-      <button
-        onClick={() => setOpen(true)}
-        className="absolute top-2 right-2 z-[1000] px-3 py-2 bg-[#1a1a1a]/95 border border-white/20 rounded-lg text-gray-300 text-sm hover:bg-[#2a2a2a] transition-colors backdrop-blur-sm"
-        title="Search location"
-      >
-        🔍
-      </button>
+      <div ref={containerRef} className="absolute top-2 right-2 z-[1000]">
+        <button
+          onClick={() => setOpen(true)}
+          className="px-3 py-2 bg-[#1a1a1a]/95 border border-white/20 rounded-lg text-gray-300 text-sm hover:bg-[#2a2a2a] transition-colors backdrop-blur-sm"
+          title="Search location"
+        >
+          🔍
+        </button>
+      </div>
     );
   }
 
   return (
-    <div className="absolute top-2 right-2 z-[1000] flex items-center gap-1">
+    <div ref={containerRef} className="absolute top-2 right-2 z-[1000] flex items-center gap-1">
       <input
         autoFocus
         value={query}

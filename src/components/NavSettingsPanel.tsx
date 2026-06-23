@@ -1,16 +1,20 @@
 'use client';
 
-import type { NavSettings } from '@/types/navigation';
+import { useRef } from 'react';
+import type { NavSettings, TriggerRadius } from '@/types/navigation';
 
 interface Props {
   settings: NavSettings;
-  onChange: (key: keyof NavSettings, value: boolean) => void;
+  onToggle: (key: keyof NavSettings, value: boolean) => void;
+  onChangeTrigger: (radius: TriggerRadius) => void;
   onClose: () => void;
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
-const icons: Record<keyof NavSettings, (active: boolean) => React.ReactNode> = {
+type BooleanNavKey = Exclude<keyof NavSettings, 'triggerRadius'>;
+
+const icons: Record<BooleanNavKey, (active: boolean) => React.ReactNode> = {
   showCounter: (a) => (
     <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke={a ? '#000' : '#fff'} strokeWidth="1.6" strokeLinecap="round">
       <rect x="3" y="4" width="18" height="16" rx="3" />
@@ -50,12 +54,18 @@ const icons: Record<keyof NavSettings, (active: boolean) => React.ReactNode> = {
       <path d="M15 9l4 4m0-4l-4 4" strokeWidth="1.8" />
     </svg>
   ),
+  vibration: (a) => (
+    <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke={a ? '#000' : '#fff'} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="8" y="3" width="8" height="18" rx="2" />
+      <path d="M4 7v10M20 7v10" />
+    </svg>
+  ),
 };
 
 // ── Chip ─────────────────────────────────────────────────────────────────────
 
 interface ChipDef {
-  key: keyof NavSettings;
+  key: BooleanNavKey;
   label: string;
   hint: string;
 }
@@ -68,8 +78,9 @@ const DISPLAY_CHIPS: ChipDef[] = [
 ];
 
 const AUDIO_CHIPS: ChipDef[] = [
-  { key: 'audioApproach',  label: 'Approach',  hint: '150 m'    },
-  { key: 'audioCrossed',   label: 'Crossed',   hint: 'double beep' },
+  { key: 'audioApproach', label: 'Approach', hint: '150 m'      },
+  { key: 'audioCrossed',  label: 'Crossed',  hint: 'double beep'},
+  { key: 'vibration',     label: 'Vibration',hint: 'on cross'   },
 ];
 
 function Chip({ def, active, onToggle }: { def: ChipDef; active: boolean; onToggle: () => void }) {
@@ -96,7 +107,28 @@ function Chip({ def, active, onToggle }: { def: ChipDef; active: boolean; onTogg
 
 // ── Panel ─────────────────────────────────────────────────────────────────────
 
-export default function NavSettingsPanel({ settings, onChange, onClose }: Props) {
+const TRIGGER_OPTIONS: TriggerRadius[] = [15, 25, 50];
+
+export default function NavSettingsPanel({ settings, onToggle, onChangeTrigger, onClose }: Props) {
+  const startYRef = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    startYRef.current = e.touches[0].clientY;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (startYRef.current === null) return;
+    const dy = e.touches[0].clientY - startYRef.current;
+    if (dy > 70) {
+      onClose();
+      startYRef.current = null;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    startYRef.current = null;
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col justify-end bg-black/70"
@@ -105,9 +137,12 @@ export default function NavSettingsPanel({ settings, onChange, onClose }: Props)
       <div
         className="bg-[#141414] border-t border-white/15 rounded-t-3xl px-5 pt-4 pb-10"
         onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
-        {/* Handle */}
-        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-6" />
+        {/* Drag handle */}
+        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-6 cursor-grab" />
 
         {/* Display */}
         <p className="text-gray-600 text-xs uppercase tracking-widest mb-3 px-1">Display</p>
@@ -116,24 +151,45 @@ export default function NavSettingsPanel({ settings, onChange, onClose }: Props)
             <Chip
               key={def.key}
               def={def}
-              active={settings[def.key]}
-              onToggle={() => onChange(def.key, !settings[def.key])}
+              active={settings[def.key] as boolean}
+              onToggle={() => onToggle(def.key, !(settings[def.key] as boolean))}
             />
           ))}
         </div>
 
-        {/* Audio */}
-        <p className="text-gray-600 text-xs uppercase tracking-widest mb-3 px-1">Audio</p>
-        <div className="grid grid-cols-2 gap-2.5">
+        {/* Audio & Haptics */}
+        <p className="text-gray-600 text-xs uppercase tracking-widest mb-3 px-1">Audio & Haptics</p>
+        <div className="grid grid-cols-3 gap-2.5 mb-6">
           {AUDIO_CHIPS.map((def) => (
             <Chip
               key={def.key}
               def={def}
-              active={settings[def.key]}
-              onToggle={() => onChange(def.key, !settings[def.key])}
+              active={settings[def.key] as boolean}
+              onToggle={() => onToggle(def.key, !(settings[def.key] as boolean))}
             />
           ))}
         </div>
+
+        {/* Trigger radius */}
+        <p className="text-gray-600 text-xs uppercase tracking-widest mb-3 px-1">Waypoint trigger radius</p>
+        <div className="flex gap-2">
+          {TRIGGER_OPTIONS.map((r) => {
+            const active = settings.triggerRadius === r;
+            return (
+              <button
+                key={r}
+                onClick={() => onChangeTrigger(r)}
+                aria-pressed={active}
+                className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-colors ${
+                  active ? 'bg-white text-black' : 'bg-[#222] text-gray-400 hover:bg-[#2a2a2a]'
+                }`}
+              >
+                {r} m
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-gray-700 text-xs mt-2 px-1">Distance at which a waypoint is auto-crossed</p>
       </div>
     </div>
   );

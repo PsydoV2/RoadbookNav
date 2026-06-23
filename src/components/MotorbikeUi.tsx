@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { NavSettings, Waypoint } from '@/types/navigation';
+import type { NavSettings, TriggerRadius, Waypoint } from '@/types/navigation';
 import { DEFAULT_NAV_SETTINGS } from '@/types/navigation';
 import NavSettingsPanel from './NavSettingsPanel';
 
@@ -25,7 +25,8 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
 }
 
 function formatDistance(meters: number): string {
-  if (meters >= 1000) return `${(meters / 1000).toFixed(2)} km`;
+  if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+  if (meters >= 100) return `${Math.round(meters / 10) * 10} m`;
   return `${Math.round(meters)} m`;
 }
 
@@ -33,10 +34,12 @@ function formatDistance(meters: number): string {
 
 const ARROW_FILE: Partial<Record<Waypoint['arrowType'], string>> = {
   straight:       '/arrows/arrow-up-sm-svgrepo-com.svg',
-  left:           '/arrows/arrow-left-sm-svgrepo-com.svg',
-  right:          '/arrows/arrow-right-sm-svgrepo-com.svg',
   'slight-left':  '/arrows/arrow-up-left-sm-svgrepo-com.svg',
+  left:           '/arrows/arrow-left-sm-svgrepo-com.svg',
+  'sharp-left':   '/arrows/arrow-down-left-sm-svgrepo-com.svg',
   'slight-right': '/arrows/arrow-up-right-sm-svgrepo-com.svg',
+  right:          '/arrows/arrow-right-sm-svgrepo-com.svg',
+  'sharp-right':  '/arrows/arrow-down-right-sm-svgrepo-com.svg',
   'u-turn':       '/arrows/arrow-down-sm-svgrepo-com.svg',
 };
 
@@ -128,6 +131,70 @@ function SettingsIcon() {
   );
 }
 
+// ── Long-press exit button ────────────────────────────────────────────────────
+
+function LongPressExit({ onExit }: { onExit: () => void }) {
+  const [progress, setProgress] = useState(0);
+  const rafRef = useRef<number>(0);
+  const startRef = useRef<number>(0);
+  const HOLD_MS = 1200;
+
+  const startHold = () => {
+    startRef.current = performance.now();
+    const tick = (now: number) => {
+      const p = Math.min((now - startRef.current) / HOLD_MS, 1);
+      setProgress(p);
+      if (p < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        onExit();
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  };
+
+  const cancelHold = () => {
+    cancelAnimationFrame(rafRef.current);
+    setProgress(0);
+  };
+
+  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
+
+  const r = 20;
+  const circ = 2 * Math.PI * r;
+
+  return (
+    <button
+      onPointerDown={startHold}
+      onPointerUp={cancelHold}
+      onPointerLeave={cancelHold}
+      onPointerCancel={cancelHold}
+      className="cursor-pointer w-14 h-14 flex-shrink-0 flex items-center justify-center relative select-none touch-none"
+      aria-label="Hold to exit navigation"
+    >
+      <svg
+        className="absolute inset-0 -rotate-90"
+        width={56}
+        height={56}
+        viewBox="0 0 56 56"
+      >
+        <circle cx={28} cy={28} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={2.5} />
+        {progress > 0 && (
+          <circle
+            cx={28} cy={28} r={r}
+            fill="none"
+            stroke="rgba(255,255,255,0.7)"
+            strokeWidth={2.5}
+            strokeDasharray={`${progress * circ} ${circ}`}
+            strokeLinecap="round"
+          />
+        )}
+      </svg>
+      <span className={`text-xl z-10 transition-colors ${progress > 0 ? 'text-white' : 'text-gray-500'}`}>✕</span>
+    </button>
+  );
+}
+
 // ── Dev flag ──────────────────────────────────────────────────────────────────
 
 const IS_DEV = process.env.NODE_ENV === 'development';
@@ -138,6 +205,8 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [distance, setDistance] = useState<number | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [isApproaching, setIsApproaching] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState<NavSettings>(DEFAULT_NAV_SETTINGS);
 
@@ -153,8 +222,14 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
 
   useEffect(() => { setSettings(loadSettings()); }, []);
 
-  const handleSettingChange = (key: keyof NavSettings, value: boolean) => {
+  const handleToggle = (key: keyof NavSettings, value: boolean) => {
     const next = { ...settings, [key]: value };
+    setSettings(next);
+    saveSettings(next);
+  };
+
+  const handleChangeTrigger = (radius: TriggerRadius) => {
+    const next = { ...settings, triggerRadius: radius };
     setSettings(next);
     saveSettings(next);
   };
@@ -172,7 +247,6 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
     return d;
   }, [waypoints]);
 
-  // Distance covered = cumulative dist up to the last crossed waypoint
   const odometerM = currentIndex > 0 ? (cumulativeDists[currentIndex - 1] ?? 0) : 0;
 
   // ── Next waypoint preview ─────────────────────────────────────────────────
@@ -222,10 +296,12 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
     if (!current) return;
     advancedRef.current = false;
     approachFiredRef.current = false;
+    setIsApproaching(false);
 
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         setGpsError(null);
+        setGpsAccuracy(pos.coords.accuracy);
         const d = haversineMeters(pos.coords.latitude, pos.coords.longitude, current.lat, current.lon);
         setDistance(d);
 
@@ -233,13 +309,15 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
 
         if (d < 150 && !approachFiredRef.current) {
           approachFiredRef.current = true;
+          setIsApproaching(true);
           if (audio && settings.audioApproach) playApproach(audio);
         }
 
-        if (d < 25 && !advancedRef.current) {
+        if (d < settings.triggerRadius && !advancedRef.current) {
           advancedRef.current = true;
+          setIsApproaching(false);
           if (audio && settings.audioCrossed) playCrossed(audio);
-          navigator.vibrate?.(400);
+          if (settings.vibration) navigator.vibrate?.(400);
           setCurrentIndex((i) => i + 1);
         }
       },
@@ -248,28 +326,31 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [current, settings.audioApproach, settings.audioCrossed]);
+  }, [current, settings.audioApproach, settings.audioCrossed, settings.triggerRadius, settings.vibration]);
 
   // ── Debug helpers ─────────────────────────────────────────────────────────
 
   const handleSkip = () => {
     advancedRef.current = false;
     approachFiredRef.current = false;
+    setIsApproaching(false);
     setCurrentIndex((i) => i + 1);
   };
 
   const debugPrev = () => {
     advancedRef.current = false;
     approachFiredRef.current = false;
+    setIsApproaching(false);
     setCurrentIndex((i) => Math.max(0, i - 1));
   };
 
   const debugNext = () => {
     advancedRef.current = false;
     approachFiredRef.current = false;
+    setIsApproaching(false);
     const audio = audioCtxRef.current;
     if (audio && settings.audioCrossed) playCrossed(audio);
-    navigator.vibrate?.(400);
+    if (settings.vibration) navigator.vibrate?.(400);
     setCurrentIndex((i) => i + 1);
   };
 
@@ -278,36 +359,38 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
   if (isFinished) {
     return (
       <div className="w-screen h-screen bg-black flex flex-col items-center justify-center gap-6 select-none">
-        <div className="w-72 h-72 rounded-full bg-[#151515] flex items-center justify-center">
+        <div className="w-72 h-72 rounded-full bg-[#222] flex items-center justify-center">
           <ArrowDisplay arrowType="finish" />
         </div>
-        <p className="text-3xl font-black">Destination reached.</p>
+        <p className="text-3xl font-black">Route complete.</p>
         <button
           onClick={onExit}
           className="cursor-pointer mt-4 px-8 py-4 bg-white text-black font-bold text-lg rounded-2xl transition-all hover:bg-gray-200 active:scale-95"
         >
-          Back to Editor
+          Back to overview
         </button>
       </div>
     );
   }
+
+  // ── GPS accuracy dot ──────────────────────────────────────────────────────
+
+  const accuracyColor =
+    gpsAccuracy === null ? 'bg-gray-700' :
+    gpsAccuracy <= 10    ? 'bg-green-400' :
+    gpsAccuracy <= 30    ? 'bg-yellow-400' :
+                           'bg-red-400';
 
   // ── Nav screen ────────────────────────────────────────────────────────────
 
   const showSecondaryRow = settings.showOdometer || (settings.showNextPreview && nextWp);
 
   return (
-    <div className="w-screen h-screen bg-black flex flex-col justify-between items-center py-12 select-none">
+    <div className="w-screen h-screen bg-black flex flex-col justify-between items-center py-10 select-none">
 
       {/* Top bar */}
-      <div className="w-full flex items-center px-5 gap-2">
-        <button
-          onClick={onExit}
-          className="cursor-pointer w-14 h-14 flex-shrink-0 flex items-center justify-center text-2xl text-gray-400 hover:text-gray-200 active:text-white transition-colors"
-          aria-label="Exit navigation"
-        >
-          ✕
-        </button>
+      <div className="w-full flex items-center px-3 gap-1">
+        <LongPressExit onExit={onExit} />
 
         {IS_DEV && (
           <div className="flex items-center gap-1 bg-yellow-400/15 border border-yellow-400/35 text-yellow-400 rounded-lg px-2 py-1.5 text-xs font-bold">
@@ -325,61 +408,89 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
           </div>
         )}
 
-        {gpsError && (
-          <span className="text-xs text-red-400 truncate">{gpsError}</span>
-        )}
+        {/* GPS accuracy dot */}
+        <span
+          className={`w-2 h-2 rounded-full flex-shrink-0 ml-1 ${accuracyColor}`}
+          title={gpsAccuracy !== null ? `GPS ±${Math.round(gpsAccuracy)} m` : 'Waiting for GPS'}
+        />
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-1">
           <button
             onClick={() => {
               advancedRef.current = false;
               approachFiredRef.current = false;
+              setIsApproaching(false);
               setCurrentIndex((i) => Math.max(0, i - 1));
             }}
             disabled={currentIndex === 0}
-            className="cursor-pointer text-xs text-gray-600 hover:text-gray-300 active:text-white transition-colors px-1 py-1 disabled:opacity-30 disabled:pointer-events-none"
+            className="cursor-pointer text-sm text-gray-500 hover:text-gray-200 active:text-white transition-colors px-4 py-3 disabled:opacity-25 disabled:pointer-events-none min-w-[70px] text-center"
             aria-label="Previous waypoint"
           >
-            ← Back
+            ← Prev
           </button>
           <button
             onClick={handleSkip}
-            className="cursor-pointer text-xs text-gray-600 hover:text-gray-300 active:text-white transition-colors px-1 py-1"
+            className="cursor-pointer text-sm text-gray-500 hover:text-gray-200 active:text-white transition-colors px-4 py-3 min-w-[70px] text-center"
             aria-label="Skip waypoint"
           >
             Skip →
           </button>
           <button
             onClick={() => setShowSettings(true)}
-            className="cursor-pointer w-10 h-10 flex items-center justify-center text-gray-500 hover:text-gray-300 active:text-white transition-colors"
+            className="cursor-pointer w-12 h-12 flex items-center justify-center text-gray-500 hover:text-gray-300 active:text-white transition-colors"
             aria-label="Nav settings"
           >
             <SettingsIcon />
           </button>
           {settings.showCounter && (
-            <span className="text-sm text-gray-600 tabular-nums w-12 text-right">
+            <span className="text-sm text-gray-600 tabular-nums w-14 text-right">
               {currentIndex + 1} / {waypoints.length}
             </span>
           )}
         </div>
       </div>
 
+      {/* GPS error — prominent warning */}
+      {gpsError && (
+        <div className="w-full px-5">
+          <div className="bg-red-950/80 border border-red-500/40 rounded-xl px-4 py-3 text-center">
+            <p className="text-red-400 font-bold text-base">GPS signal lost</p>
+            <p className="text-red-400/70 text-xs mt-0.5">{gpsError}</p>
+          </div>
+        </div>
+      )}
+
       {/* Arrow circle */}
-      <div className="w-72 h-72 rounded-full bg-[#151515] flex items-center justify-center flex-shrink-0">
-        {current && <ArrowDisplay arrowType={current.arrowType} />}
+      <div className="relative flex-shrink-0 w-72 h-72">
+        {isApproaching && (
+          <div className="absolute inset-0 rounded-full bg-amber-500/20 animate-ping" />
+        )}
+        <div
+          className={`absolute inset-0 rounded-full flex items-center justify-center transition-colors duration-500 ${
+            gpsError
+              ? 'bg-red-950/60'
+              : isApproaching
+              ? 'bg-amber-950/80'
+              : 'bg-[#222]'
+          }`}
+        >
+          {current && <ArrowDisplay arrowType={current.arrowType} />}
+        </div>
       </div>
 
       {/* Bottom info */}
       <div className="flex flex-col items-center gap-2 px-6 text-center w-full max-w-xs">
 
         {/* Main distance */}
-        <span className="text-6xl font-black tabular-nums leading-none whitespace-nowrap">
+        <span className={`text-6xl font-black tabular-nums leading-none whitespace-nowrap ${gpsError ? 'text-red-400' : 'text-white'}`}>
           {distance !== null ? formatDistance(distance) : '—'}
         </span>
 
         {/* Waypoint label */}
         {settings.showLabel && current?.label && (
-          <span className="text-xl text-gray-400 mt-1">→ {current.label}</span>
+          <span className="text-xl text-white mt-1">
+            <span className="text-gray-500">→ </span>{current.label}
+          </span>
         )}
 
         {/* Secondary row: odometer + next preview */}
@@ -388,7 +499,7 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
 
             {settings.showOdometer && (
               <span className="text-gray-500 text-sm tabular-nums">
-                km {(odometerM / 1000).toFixed(1)}
+                {(odometerM / 1000).toFixed(1)} km
               </span>
             )}
 
@@ -421,7 +532,8 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
       {showSettings && (
         <NavSettingsPanel
           settings={settings}
-          onChange={handleSettingChange}
+          onToggle={handleToggle}
+          onChangeTrigger={handleChangeTrigger}
           onClose={() => setShowSettings(false)}
         />
       )}

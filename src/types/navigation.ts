@@ -2,7 +2,7 @@ export interface Waypoint {
   id: string;
   lat: number;
   lon: number;
-  arrowType: 'start' | 'straight' | 'left' | 'right' | 'slight-left' | 'slight-right' | 'u-turn' | 'finish';
+  arrowType: 'start' | 'straight' | 'slight-left' | 'left' | 'sharp-left' | 'slight-right' | 'right' | 'sharp-right' | 'u-turn' | 'finish';
   label: string;
 }
 
@@ -13,13 +13,17 @@ export interface Track {
   waypoints: Waypoint[];
 }
 
+export type TriggerRadius = 15 | 25 | 50;
+
 export interface NavSettings {
-  showCounter: boolean;      // "3 / 7"
-  showLabel: boolean;        // waypoint label below distance
-  showOdometer: boolean;     // cumulative km along route
-  showNextPreview: boolean;  // next waypoint arrow + distance
-  audioApproach: boolean;    // beep at 150 m
-  audioCrossed: boolean;     // double-beep when waypoint crossed
+  showCounter: boolean;
+  showLabel: boolean;
+  showOdometer: boolean;
+  showNextPreview: boolean;
+  audioApproach: boolean;
+  audioCrossed: boolean;
+  vibration: boolean;
+  triggerRadius: TriggerRadius;
 }
 
 export const DEFAULT_NAV_SETTINGS: NavSettings = {
@@ -29,4 +33,6 @@ export const DEFAULT_NAV_SETTINGS: NavSettings = {
   showNextPreview: true,
   audioApproach: true,
   audioCrossed: true,
+  vibration: true,
+  triggerRadius: 25,
 };

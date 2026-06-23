@@ -80,12 +80,12 @@ export default function Home() {
               {
                 n: '01',
                 title: 'Plan',
-                body: 'Open the map editor at home. Click to place waypoints. Assign a direction to each — straight, left, sharp right, U-turn. Export as a single .json file.',
+                body: 'Open the map editor at home. Click to place waypoints. Assign a direction to each — straight, bear left, sharp right, U-turn. Save your route as a file.',
               },
               {
                 n: '02',
                 title: 'Load',
-                body: 'Open the app on your phone. Import the JSON. Two seconds. No sync, no cloud, no account. The route lives in your browser\'s local storage.',
+                body: 'Open the app on your phone and import the saved file. Two seconds. No sync, no cloud, no account required.',
               },
               {
                 n: '03',
@@ -268,7 +268,7 @@ function PhoneMockup() {
 
           {/* Arrow circle */}
           <div
-            className="rounded-full bg-[#151515] flex items-center justify-center"
+            className="rounded-full bg-[#222] flex items-center justify-center"
             style={{ width: 168, height: 168 }}
           >
             <img

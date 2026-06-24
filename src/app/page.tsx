@@ -71,6 +71,48 @@ export default function Home() {
         <PhoneMockup />
       </section>
 
+      {/* ── Editor ── */}
+      <section className="border-t border-white/10 py-24 px-8">
+        <div className="max-w-6xl mx-auto flex flex-col lg:flex-row items-start gap-16">
+          <div className="flex flex-col gap-6 flex-shrink-0 lg:max-w-sm">
+            <p className="text-gray-500 text-sm uppercase tracking-widest">Route editor</p>
+            <h2 className="text-3xl font-black leading-tight">
+              Build your route at home.
+            </h2>
+            <p className="text-gray-400 text-sm leading-relaxed">
+              The editor runs in your browser — no install, no account. Drop waypoints on a live
+              map, assign a direction to each turn, then export a single JSON file. That file is
+              everything the navigation needs.
+            </p>
+            <ul className="flex flex-col gap-3 text-sm">
+              {([
+                ['Click to place', 'Drop a waypoint on the map and pick a turn direction. Nothing else required.'],
+                ['Drag to adjust', 'Reposition markers directly on the map or reorder them in the strip below.'],
+                ['Multiple tracks', 'Build route variants side by side and switch between them instantly.'],
+                ['Export and go', 'One JSON file per route. Import it on your phone in two taps.'],
+              ] as const).map(([title, desc]) => (
+                <li key={title} className="flex gap-3">
+                  <span className="text-gray-700 mt-0.5 select-none flex-shrink-0">—</span>
+                  <span>
+                    <span className="text-white font-medium">{title}</span>
+                    <span className="text-gray-500"> {desc}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <Link
+              href="/app/"
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white/5 border border-white/20 text-sm text-white hover:bg-white/10 transition-colors self-start"
+            >
+              Open the editor →
+            </Link>
+          </div>
+          <div className="flex-1 min-w-0">
+            <EditorMockup />
+          </div>
+        </div>
+      </section>
+
       {/* ── How it works ── */}
       <section id="how-it-works" className="border-t border-white/10 py-24 px-8">
         <div className="max-w-3xl mx-auto">
@@ -240,6 +282,33 @@ export default function Home() {
   );
 }
 
+// ── Editor mockup ────────────────────────────────────────────────────────────
+
+function EditorMockup() {
+  return (
+    <div className="w-full rounded-xl overflow-hidden border border-white/15 shadow-2xl bg-[#0f0f0f]">
+      {/* Browser chrome */}
+      <div className="flex items-center gap-3 px-4 bg-[#1a1a1a] border-b border-white/10" style={{ height: 36 }}>
+        <div className="flex gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]/80" />
+          <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]/80" />
+          <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]/80" />
+        </div>
+        <div className="flex-1 bg-[#0d0d0d] border border-white/10 rounded-md px-3 py-1 text-[11px] text-gray-500 font-mono truncate">
+          roadbooknav.app/app/
+        </div>
+      </div>
+      {/* Screenshot */}
+      <img
+        src="/editor_preview.png"
+        alt="Roadbook Nav editor — route planned through forest terrain"
+        className="w-full block"
+        draggable={false}
+      />
+    </div>
+  );
+}
+
 // ── Phone mockup ─────────────────────────────────────────────────────────────
 
 function PhoneMockup() {
@@ -249,6 +318,7 @@ function PhoneMockup() {
       <div
         className="absolute inset-0 rounded-[2.8rem] opacity-20 blur-2xl"
         style={{ background: 'radial-gradient(ellipse at center, #ffffff 0%, transparent 70%)' }}
+        suppressHydrationWarning
       />
 
       {/* Phone frame */}
@@ -258,33 +328,73 @@ function PhoneMockup() {
         <div className="absolute top-3.5 left-1/2 -translate-x-1/2 w-[72px] h-[22px] bg-black rounded-full z-10" />
 
         {/* Screen — nav UI */}
-        <div className="absolute inset-0 flex flex-col items-center justify-between py-10 pt-14 select-none">
+        <div className="absolute inset-0 flex flex-col items-center justify-between py-8 pt-14 select-none">
 
           {/* Top bar */}
-          <div className="w-full flex items-center justify-between px-5">
-            <span className="text-gray-600 text-sm">✕</span>
-            <span className="text-gray-600 text-xs tabular-nums">3 / 7</span>
+          <div className="w-full flex items-center px-3 gap-1">
+            {/* Long-press exit */}
+            <div className="w-10 h-10 flex-shrink-0 flex items-center justify-center relative">
+              <svg className="absolute inset-0" width={40} height={40} viewBox="0 0 40 40">
+                <circle cx={20} cy={20} r={14} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={2} />
+              </svg>
+              <span className="text-gray-600 text-sm z-10">✕</span>
+            </div>
+            {/* GPS accuracy dot */}
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+            {/* Right side controls */}
+            <div className="ml-auto flex items-center gap-0.5">
+              <span className="text-[9px] text-gray-600 px-1.5 py-1">← Prev</span>
+              <span className="text-[9px] text-gray-600 px-1.5 py-1">Skip →</span>
+              <div className="w-7 h-7 flex items-center justify-center text-gray-600">
+                <svg viewBox="0 0 24 24" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="3" y1="6"  x2="21" y2="6"  />
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                  <circle cx="8"  cy="6"  r="2.5" fill="currentColor" stroke="none" />
+                  <circle cx="16" cy="12" r="2.5" fill="currentColor" stroke="none" />
+                  <circle cx="11" cy="18" r="2.5" fill="currentColor" stroke="none" />
+                </svg>
+              </div>
+              <span className="text-[9px] text-gray-600 tabular-nums w-6 text-right">3/7</span>
+            </div>
           </div>
 
           {/* Arrow circle */}
           <div
-            className="rounded-full bg-[#222] flex items-center justify-center"
-            style={{ width: 168, height: 168 }}
+            className="rounded-full bg-[#222] flex items-center justify-center flex-shrink-0"
+            style={{ width: 152, height: 152 }}
           >
             <img
               src="/arrows/arrow-right-sm-svgrepo-com.svg"
-              width={110}
-              height={110}
+              width={100}
+              height={100}
               alt="right turn"
               style={{ filter: 'invert(1)' }}
               draggable={false}
             />
           </div>
 
-          {/* Distance + label */}
-          <div className="flex flex-col items-center gap-1.5 text-center px-4">
-            <span className="text-[2.8rem] font-black tabular-nums leading-none">1.8 km</span>
-            <span className="text-gray-400 text-sm">→ Forest Fork</span>
+          {/* Bottom info */}
+          <div className="flex flex-col items-center gap-1.5 text-center px-4 w-full">
+            <span className="text-[2.2rem] font-black tabular-nums leading-none">1.8 km</span>
+            <span className="text-white text-sm">
+              <span className="text-gray-500">→ </span>Forest Fork
+            </span>
+            {/* Secondary row: odometer + next preview */}
+            <div className="flex items-center justify-between w-full mt-2 pt-2 border-t border-white/10">
+              <span className="text-gray-500 text-[10px] tabular-nums">12.4 km</span>
+              <div className="flex items-center gap-1 ml-auto">
+                <img
+                  src="/arrows/arrow-up-left-sm-svgrepo-com.svg"
+                  width={10}
+                  height={10}
+                  alt="slight-left"
+                  style={{ filter: 'invert(0.4)' }}
+                  draggable={false}
+                />
+                <span className="text-gray-500 text-[10px] tabular-nums">340 m</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -294,6 +404,7 @@ function PhoneMockup() {
           style={{
             background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 50%)',
           }}
+          suppressHydrationWarning
         />
       </div>
 

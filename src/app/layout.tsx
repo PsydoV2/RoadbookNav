@@ -33,7 +33,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="bg-black text-white antialiased">
+      <body className="bg-black text-white antialiased" suppressHydrationWarning>
         {children}
         <ServiceWorkerRegistration />
       </body>

@@ -42,6 +42,17 @@ const ARROW_TYPES: Waypoint['arrowType'][] = [
   'sharp-left',   'sharp-right',
 ];
 
+function parseGpx(text: string): [number, number][] {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const points: [number, number][] = [];
+  doc.querySelectorAll('trkpt, rtept').forEach((pt) => {
+    const lat = parseFloat(pt.getAttribute('lat') ?? '');
+    const lon = parseFloat(pt.getAttribute('lon') ?? '');
+    if (!isNaN(lat) && !isNaN(lon)) points.push([lat, lon]);
+  });
+  return points;
+}
+
 const ARROW_FILE: Partial<Record<Waypoint['arrowType'], string>> = {
   straight:       '/arrows/arrow-up-sm-svgrepo-com.svg',
   'slight-left':  '/arrows/arrow-up-left-sm-svgrepo-com.svg',
@@ -271,6 +282,22 @@ function MapSearch() {
   );
 }
 
+// GPX overlay — fits map to the imported track on mount
+function GpxOverlay({ path }: { path: [number, number][] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (path.length > 1) map.fitBounds(L.latLngBounds(path), { padding: [40, 40] });
+  }, [map, path]);
+  return (
+    <>
+      {/* White halo so the line reads against any map background */}
+      <Polyline positions={path} color="white" weight={8} opacity={0.55} lineCap="round" lineJoin="round" />
+      {/* Orange dashed line on top */}
+      <Polyline positions={path} color="#f97316" weight={4} opacity={0.95} dashArray="10 6" lineCap="round" lineJoin="round" />
+    </>
+  );
+}
+
 // Arrow-type grid shared by both modals
 function ArrowGrid({
   value,
@@ -440,7 +467,10 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [historyLen, setHistoryLen] = useState(0);
 
+  const [gpxPath, setGpxPath] = useState<[number, number][] | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const gpxInputRef  = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const isDraggingRef = useRef(false);
@@ -682,6 +712,24 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
     e.target.value = '';
   };
 
+  // ── GPX import ──────────────────────────────────────────────────────────
+
+  const handleGpxImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const path = parseGpx(ev.target?.result as string);
+      if (path.length === 0) {
+        alert('No track points found in this GPX file.');
+      } else {
+        setGpxPath(path);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   // ── Map center ───────────────────────────────────────────────────────────
 
   const firstWp = tracks.flatMap((t) => t.waypoints)[0];
@@ -736,6 +784,20 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
           >
             ↓ Export All
           </button>
+          <button
+            onClick={() => gpxInputRef.current?.click()}
+            className={`px-3 py-2 text-xs whitespace-nowrap ${BTN_GHOST}`}
+          >
+            ↑ GPX
+          </button>
+          {gpxPath && (
+            <button
+              onClick={() => setGpxPath(null)}
+              className="cursor-pointer px-3 py-2 text-xs whitespace-nowrap bg-[#2a2a2a] border border-orange-400/40 rounded-lg text-orange-400 transition-colors hover:bg-orange-400/10 active:bg-orange-400/15"
+            >
+              ✕ GPX
+            </button>
+          )}
         </div>
 
         {/* Mobile: dropdown menu for import/export */}
@@ -779,11 +841,27 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
               >
                 ↓ Export All
               </button>
+              <div className="border-t border-white/10 my-1" />
+              <button
+                onClick={() => { gpxInputRef.current?.click(); setMenuOpen(false); }}
+                className={`px-3 py-2 text-xs text-left whitespace-nowrap ${BTN_GHOST}`}
+              >
+                ↑ GPX overlay
+              </button>
+              {gpxPath && (
+                <button
+                  onClick={() => { setGpxPath(null); setMenuOpen(false); }}
+                  className="cursor-pointer px-3 py-2 text-xs text-left whitespace-nowrap bg-[#2a2a2a] border border-orange-400/40 rounded-lg text-orange-400 transition-colors hover:bg-orange-400/10"
+                >
+                  ✕ GPX overlay
+                </button>
+              )}
             </div>
           )}
         </div>
 
-        <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
+        <input ref={fileInputRef} type="file" accept=".json"       className="hidden" onChange={handleImport} />
+        <input ref={gpxInputRef}  type="file" accept=".gpx,.xml"  className="hidden" onChange={handleGpxImport} />
 
         <div className="ml-auto flex items-center gap-2 flex-shrink-0">
           {activeWpCount > 0 && !hasFinish && (
@@ -880,6 +958,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
           />
           <ClickHandler onMapClick={handleMapClick} />
           <MapSearch />
+          {gpxPath && <GpxOverlay path={gpxPath} />}
 
           {tracks.map((track) => {
             const isActive = track.id === activeTrackId;

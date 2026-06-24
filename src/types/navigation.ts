@@ -36,3 +36,24 @@ export const DEFAULT_NAV_SETTINGS: NavSettings = {
   vibration: true,
   triggerRadius: 25,
 };
+
+export const ARROW_TYPES: Waypoint['arrowType'][] = [
+  'start',        'finish',
+  'straight',     'u-turn',
+  'slight-left',  'slight-right',
+  'left',         'right',
+  'sharp-left',   'sharp-right',
+];
+
+export const ARROW_FILE: Partial<Record<Waypoint['arrowType'], string>> = {
+  straight:       '/arrows/arrow-up-sm-svgrepo-com.svg',
+  'slight-left':  '/arrows/arrow-up-left-sm-svgrepo-com.svg',
+  left:           '/arrows/arrow-left-sm-svgrepo-com.svg',
+  'sharp-left':   '/arrows/arrow-down-left-sm-svgrepo-com.svg',
+  'slight-right': '/arrows/arrow-up-right-sm-svgrepo-com.svg',
+  right:          '/arrows/arrow-right-sm-svgrepo-com.svg',
+  'sharp-right':  '/arrows/arrow-down-right-sm-svgrepo-com.svg',
+  'u-turn':       '/arrows/arrow-down-sm-svgrepo-com.svg',
+};
+
+export const APPROACH_DISTANCE_M = 150;

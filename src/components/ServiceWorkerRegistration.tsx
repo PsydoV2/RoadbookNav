@@ -13,11 +13,11 @@ export default function ServiceWorkerRegistration() {
       return;
     }
 
+    let onVisibility: (() => void) | null = null;
     navigator.serviceWorker.register('/sw.js').then((reg) => {
       // On every visibility restore, check if a new SW version is available
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') reg.update();
-      });
+      onVisibility = () => { if (document.visibilityState === 'visible') reg.update(); };
+      document.addEventListener('visibilitychange', onVisibility);
     });
 
     // When a new SW activates (skipWaiting fired), reload once to serve the fresh build
@@ -28,6 +28,10 @@ export default function ServiceWorkerRegistration() {
         window.location.reload();
       }
     });
+
+    return () => {
+      if (onVisibility) document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, []);
 
   return null;

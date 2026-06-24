@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NavSettings, TriggerRadius, Waypoint } from '@/types/navigation';
-import { DEFAULT_NAV_SETTINGS } from '@/types/navigation';
+import { APPROACH_DISTANCE_M, ARROW_FILE, DEFAULT_NAV_SETTINGS } from '@/types/navigation';
 import NavSettingsPanel from './NavSettingsPanel';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -32,16 +32,6 @@ function formatDistance(meters: number): string {
 
 // ── Arrow display ─────────────────────────────────────────────────────────────
 
-const ARROW_FILE: Partial<Record<Waypoint['arrowType'], string>> = {
-  straight:       '/arrows/arrow-up-sm-svgrepo-com.svg',
-  'slight-left':  '/arrows/arrow-up-left-sm-svgrepo-com.svg',
-  left:           '/arrows/arrow-left-sm-svgrepo-com.svg',
-  'sharp-left':   '/arrows/arrow-down-left-sm-svgrepo-com.svg',
-  'slight-right': '/arrows/arrow-up-right-sm-svgrepo-com.svg',
-  right:          '/arrows/arrow-right-sm-svgrepo-com.svg',
-  'sharp-right':  '/arrows/arrow-down-right-sm-svgrepo-com.svg',
-  'u-turn':       '/arrows/arrow-down-sm-svgrepo-com.svg',
-};
 
 function ArrowDisplay({ arrowType, size = 210 }: { arrowType: Waypoint['arrowType']; size?: number }) {
   const file = ARROW_FILE[arrowType];
@@ -307,7 +297,7 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
 
         const audio = audioCtxRef.current;
 
-        if (d < 150 && !approachFiredRef.current) {
+        if (d < APPROACH_DISTANCE_M && !approachFiredRef.current) {
           approachFiredRef.current = true;
           setIsApproaching(true);
           if (audio && settings.audioApproach) playApproach(audio);
@@ -334,6 +324,9 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
     advancedRef.current = false;
     approachFiredRef.current = false;
     setIsApproaching(false);
+    const audio = audioCtxRef.current;
+    if (audio && settings.audioCrossed) playCrossed(audio);
+    if (settings.vibration) navigator.vibrate?.(400);
     setCurrentIndex((i) => i + 1);
   };
 
@@ -499,7 +492,7 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
 
             {settings.showOdometer && (
               <span className="text-gray-500 text-sm tabular-nums">
-                {(odometerM / 1000).toFixed(1)} km
+                {formatDistance(odometerM)}
               </span>
             )}
 

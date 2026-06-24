@@ -5,13 +5,7 @@ import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from 
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Track, Waypoint } from '@/types/navigation';
-
-delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
+import { ARROW_FILE, ARROW_TYPES } from '@/types/navigation';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -33,14 +27,6 @@ const ARROW_LABELS: Record<Waypoint['arrowType'], string> = {
   'sharp-right':  'Sharp right',
 };
 
-// Ordered for the UI grid: paired by direction intensity
-const ARROW_TYPES: Waypoint['arrowType'][] = [
-  'start',        'finish',
-  'straight',     'u-turn',
-  'slight-left',  'slight-right',
-  'left',         'right',
-  'sharp-left',   'sharp-right',
-];
 
 function parseGpx(text: string): [number, number][] {
   const doc = new DOMParser().parseFromString(text, 'application/xml');
@@ -53,16 +39,6 @@ function parseGpx(text: string): [number, number][] {
   return points;
 }
 
-const ARROW_FILE: Partial<Record<Waypoint['arrowType'], string>> = {
-  straight:       '/arrows/arrow-up-sm-svgrepo-com.svg',
-  'slight-left':  '/arrows/arrow-up-left-sm-svgrepo-com.svg',
-  left:           '/arrows/arrow-left-sm-svgrepo-com.svg',
-  'sharp-left':   '/arrows/arrow-down-left-sm-svgrepo-com.svg',
-  'slight-right': '/arrows/arrow-up-right-sm-svgrepo-com.svg',
-  right:          '/arrows/arrow-right-sm-svgrepo-com.svg',
-  'sharp-right':  '/arrows/arrow-down-right-sm-svgrepo-com.svg',
-  'u-turn':       '/arrows/arrow-down-sm-svgrepo-com.svg',
-};
 
 // ── Button style tokens ──────────────────────────────────────────────────────
 
@@ -222,7 +198,7 @@ function MapSearch() {
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
-        { headers: { 'Accept-Language': 'en' } },
+        { headers: { 'Accept-Language': 'en', 'User-Agent': 'RoadbookNav/1.0' } },
       );
       const data: Array<{ lat: string; lon: string }> = await res.json();
       if (data[0]) {
@@ -232,7 +208,9 @@ function MapSearch() {
       } else {
         setNotFound(true);
       }
-    } catch { /* ignore */ }
+    } catch {
+      setNotFound(true);
+    }
     setSearching(false);
   };
 
@@ -719,13 +697,14 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const path = parseGpx(ev.target?.result as string);
+      const path = parseGpx(ev.target!.result as string);
       if (path.length === 0) {
         alert('No track points found in this GPX file.');
       } else {
         setGpxPath(path);
       }
     };
+    reader.onerror = () => alert('Could not read GPX file.');
     reader.readAsText(file);
     e.target.value = '';
   };

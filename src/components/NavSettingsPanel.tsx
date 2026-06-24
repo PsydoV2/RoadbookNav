@@ -42,6 +42,12 @@ const icons: Record<BooleanNavKey, (active: boolean) => React.ReactNode> = {
       <path d="M12 17l5-5-5-5" />
     </svg>
   ),
+  showCompass: (a) => (
+    <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke={a ? '#000' : '#fff'} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M15.5 8.5l-2 5-5 2 2-5 5-2z" fill={a ? '#000' : '#fff'} stroke="none" />
+    </svg>
+  ),
   audioApproach: (a) => (
     <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke={a ? '#000' : '#fff'} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M11 5L6 9H2v6h4l5 4V5z" />
@@ -156,6 +162,32 @@ export default function NavSettingsPanel({ settings, onToggle, onChangeTrigger, 
             />
           ))}
         </div>
+
+        {/* Compass — single explanatory row, off by default to keep the screen minimal */}
+        <button
+          onClick={() => onToggle('showCompass', !settings.showCompass)}
+          aria-pressed={settings.showCompass}
+          className={`w-full flex items-center gap-3 mb-6 px-4 py-3 rounded-2xl text-left transition-colors ${
+            settings.showCompass ? 'bg-white' : 'bg-[#222]'
+          }`}
+        >
+          <span className="flex-shrink-0">{icons.showCompass(settings.showCompass)}</span>
+          <span className="flex-1 leading-tight">
+            <span className={`block text-sm font-semibold ${settings.showCompass ? 'text-black' : 'text-white'}`}>
+              Compass to waypoint
+            </span>
+            <span className={`block text-xs mt-0.5 ${settings.showCompass ? 'text-black/50' : 'text-gray-600'}`}>
+              Edge tick points the way · needs movement
+            </span>
+          </span>
+          <span
+            className={`flex-shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${
+              settings.showCompass ? 'bg-black/10 text-black' : 'bg-white/10 text-gray-400'
+            }`}
+          >
+            {settings.showCompass ? 'ON' : 'OFF'}
+          </span>
+        </button>
 
         {/* Audio & Haptics */}
         <p className="text-gray-600 text-xs uppercase tracking-widest mb-3 px-1">Audio & Haptics</p>

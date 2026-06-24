@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -107,6 +107,21 @@ function nextColor(tracks: Track[]): string {
   return TRACK_COLORS[tracks.length % TRACK_COLORS.length];
 }
 
+// A short, believable forest loop so first-time users see the concept instantly
+const DEMO_POINTS: Array<Omit<Waypoint, 'id'>> = [
+  { lat: 48.1100, lon: 11.4500, arrowType: 'start',       label: 'Trailhead' },
+  { lat: 48.1135, lon: 11.4560, arrowType: 'right',       label: 'Forest Fork' },
+  { lat: 48.1180, lon: 11.4585, arrowType: 'slight-left', label: 'Creek Bend' },
+  { lat: 48.1205, lon: 11.4540, arrowType: 'left',        label: 'Ridge Junction' },
+  { lat: 48.1240, lon: 11.4500, arrowType: 'straight',    label: 'Meadow' },
+  { lat: 48.1235, lon: 11.4445, arrowType: 'sharp-right', label: 'Rocky Descent' },
+  { lat: 48.1190, lon: 11.4420, arrowType: 'finish',      label: 'Summit Hut' },
+];
+
+function demoWaypoints(): Waypoint[] {
+  return DEMO_POINTS.map((p) => ({ ...p, id: crypto.randomUUID() }));
+}
+
 function createTrack(tracks: Track[]): Track {
   return {
     id: crypto.randomUUID(),
@@ -168,10 +183,51 @@ function isTrackArray(data: unknown): data is Track[] {
 // ── Sub-components ───────────────────────────────────────────────────────────
 
 interface ClickHandlerProps {
+  gpxPath: [number, number][] | null;
   onMapClick: (lat: number, lon: number) => void;
 }
-function ClickHandler({ onMapClick }: ClickHandlerProps) {
-  useMapEvents({ click: (e) => onMapClick(e.latlng.lat, e.latlng.lng) });
+// Snap a click onto the GPX overlay when it lands within SNAP_PX of the line
+const SNAP_PX = 18;
+function ClickHandler({ gpxPath, onMapClick }: ClickHandlerProps) {
+  const map = useMap();
+  useMapEvents({
+    click: (e) => {
+      let { lat, lng } = e.latlng;
+      if (gpxPath && gpxPath.length > 0) {
+        const clickPt = map.latLngToContainerPoint(e.latlng);
+        const pts = gpxPath.map(([la, lo]) => map.latLngToContainerPoint([la, lo]));
+        let bestPt: L.Point | null = null;
+        let bestDist = Infinity;
+        if (pts.length === 1) {
+          bestPt = pts[0];
+          bestDist = clickPt.distanceTo(pts[0]);
+        } else {
+          for (let i = 0; i < pts.length - 1; i++) {
+            const c = L.LineUtil.closestPointOnSegment(clickPt, pts[i], pts[i + 1]);
+            const dd = clickPt.distanceTo(c);
+            if (dd < bestDist) { bestDist = dd; bestPt = c; }
+          }
+        }
+        if (bestPt && bestDist <= SNAP_PX) {
+          const ll = map.containerPointToLatLng(bestPt);
+          lat = ll.lat;
+          lng = ll.lng;
+        }
+      }
+      onMapClick(lat, lng);
+    },
+  });
+  return null;
+}
+
+// Imperatively fits the map to a set of positions once, then clears the trigger
+function FitBounds({ positions, onDone }: { positions: [number, number][]; onDone: () => void }) {
+  const map = useMap();
+  useEffect(() => {
+    if (positions.length === 1) map.setView(positions[0], 14);
+    else if (positions.length > 1) map.fitBounds(L.latLngBounds(positions), { padding: [60, 60] });
+    onDone();
+  }, [map, positions, onDone]);
   return null;
 }
 
@@ -446,6 +502,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
   const [historyLen, setHistoryLen] = useState(0);
 
   const [gpxPath, setGpxPath] = useState<[number, number][] | null>(null);
+  const [fitTarget, setFitTarget] = useState<[number, number][] | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const gpxInputRef  = useRef<HTMLInputElement>(null);
@@ -504,11 +561,41 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
 
   const activeTrack = tracks.find((t) => t.id === activeTrackId) ?? null;
 
+  // Pre-build marker icons keyed by waypoint id — only rebuilt when tracks or the
+  // active selection change, not on every unrelated re-render (modals, menus, search)
+  const markerIcons = useMemo(() => {
+    const m = new Map<string, L.DivIcon>();
+    for (const track of tracks) {
+      const isActive = track.id === activeTrackId;
+      track.waypoints.forEach((wp, i) => {
+        m.set(wp.id, makeMarkerIcon(i, track.color, isActive, isActive));
+      });
+    }
+    return m;
+  }, [tracks, activeTrackId]);
+
   // ── Track CRUD ──────────────────────────────────────────────────────────
 
   const handleAddTrack = () => {
     const track = createTrack(tracks);
     commit([...tracks, track], track.id);
+  };
+
+  // Fill the current empty track with a demo route, or add a new one if the
+  // active track already has waypoints — then frame it on the map
+  const handleLoadDemo = () => {
+    const wps = demoWaypoints();
+    const positions = wps.map((w): [number, number] => [w.lat, w.lon]);
+    if (activeTrack && activeTrack.waypoints.length === 0) {
+      commit(
+        tracks.map((t) => (t.id === activeTrack.id ? { ...t, name: 'Demo Route', waypoints: wps } : t)),
+        activeTrack.id,
+      );
+    } else {
+      const demo: Track = { id: crypto.randomUUID(), name: 'Demo Route', color: nextColor(tracks), waypoints: wps };
+      commit([...tracks, demo], demo.id);
+    }
+    setFitTarget(positions);
   };
 
   const handleDeleteTrack = (id: string) => {
@@ -935,15 +1022,16 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           />
-          <ClickHandler onMapClick={handleMapClick} />
+          <ClickHandler gpxPath={gpxPath} onMapClick={handleMapClick} />
           <MapSearch />
           {gpxPath && <GpxOverlay path={gpxPath} />}
+          {fitTarget && <FitBounds positions={fitTarget} onDone={() => setFitTarget(null)} />}
 
           {tracks.map((track) => {
             const isActive = track.id === activeTrackId;
             const positions: [number, number][] = track.waypoints.map((w) => [w.lat, w.lon]);
             return (
-              <span key={track.id}>
+              <Fragment key={track.id}>
                 {positions.length > 1 && (
                   <Polyline
                     positions={positions}
@@ -956,7 +1044,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
                   <Marker
                     key={wp.id}
                     position={[wp.lat, wp.lon]}
-                    icon={makeMarkerIcon(i, track.color, isActive, isActive)}
+                    icon={markerIcons.get(wp.id) ?? makeMarkerIcon(i, track.color, isActive, isActive)}
                     draggable={isActive}
                     eventHandlers={{
                       click: () => {
@@ -978,17 +1066,26 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
                     }}
                   />
                 ))}
-              </span>
+              </Fragment>
             );
           })}
         </MapContainer>
 
         {activeTrack && activeTrack.waypoints.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[500]">
-            <div className="bg-black/80 border border-white/20 rounded-xl px-6 py-4 text-center max-w-xs">
+            <div className="bg-black/80 border border-white/20 rounded-xl px-6 py-5 text-center max-w-xs flex flex-col items-center gap-3 pointer-events-auto">
               <p className="text-gray-200 text-sm">
-                Click the map to place your first waypoint
+                {gpxPath
+                  ? 'Click the orange line to trace it into waypoints'
+                  : 'Click the map to place your first waypoint'}
               </p>
+              <span className="text-gray-600 text-xs">— or —</span>
+              <button
+                onClick={handleLoadDemo}
+                className={`px-4 py-2.5 text-sm ${BTN_PRIMARY}`}
+              >
+                Load a demo route
+              </button>
             </div>
           </div>
         )}

@@ -24,6 +24,16 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Initial bearing (forward azimuth) from point 1 → point 2, in degrees (0 = north)
+function bearingDeg(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
 function formatDistance(meters: number): string {
   if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
   if (meters >= 100) return `${Math.round(meters / 10) * 10} m`;
@@ -197,6 +207,7 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [isApproaching, setIsApproaching] = useState(false);
+  const [relBearing, setRelBearing] = useState<number | null>(null); // bearing to next wp relative to heading
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState<NavSettings>(DEFAULT_NAV_SETTINGS);
 
@@ -204,6 +215,8 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
   const audioCtxRef = useRef<AudioCtx | null>(null);
   const advancedRef = useRef(false);
   const approachFiredRef = useRef(false);
+  const minDistRef = useRef(Infinity);   // closest distance reached for current wp (overshoot detection)
+  const settingsRef = useRef(settings);  // read live settings inside the GPS watch without re-subscribing
 
   const current = waypoints[currentIndex] ?? null;
   const isFinished = currentIndex >= waypoints.length;
@@ -211,6 +224,9 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
   // ── Load settings ─────────────────────────────────────────────────────────
 
   useEffect(() => { setSettings(loadSettings()); }, []);
+
+  // Mirror settings into a ref so the GPS watch reads live values without re-subscribing
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   const handleToggle = (key: keyof NavSettings, value: boolean) => {
     const next = { ...settings, [key]: value };
@@ -286,7 +302,19 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
     if (!current) return;
     advancedRef.current = false;
     approachFiredRef.current = false;
+    minDistRef.current = Infinity;
     setIsApproaching(false);
+
+    // Single advance path — fired by either entering the trigger radius or overshooting it
+    const advance = () => {
+      advancedRef.current = true;
+      setIsApproaching(false);
+      const s = settingsRef.current;
+      const audio = audioCtxRef.current;
+      if (audio && s.audioCrossed) playCrossed(audio);
+      if (s.vibration) navigator.vibrate?.(400);
+      setCurrentIndex((i) => i + 1);
+    };
 
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -294,21 +322,43 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
         setGpsAccuracy(pos.coords.accuracy);
         const d = haversineMeters(pos.coords.latitude, pos.coords.longitude, current.lat, current.lon);
         setDistance(d);
+        if (d < minDistRef.current) minDistRef.current = d;
 
+        const s = settingsRef.current;
         const audio = audioCtxRef.current;
+
+        // Heading-relative bearing to the waypoint (only when the compass is enabled
+        // and the device reports a heading — typically while actually moving)
+        if (s.showCompass) {
+          const h = pos.coords.heading;
+          if (h !== null && !Number.isNaN(h)) {
+            const brg = bearingDeg(pos.coords.latitude, pos.coords.longitude, current.lat, current.lon);
+            setRelBearing(((brg - h + 540) % 360) - 180);
+          } else {
+            setRelBearing(null);
+          }
+        }
 
         if (d < APPROACH_DISTANCE_M && !approachFiredRef.current) {
           approachFiredRef.current = true;
           setIsApproaching(true);
-          if (audio && settings.audioApproach) playApproach(audio);
+          if (audio && s.audioApproach) playApproach(audio);
         }
 
-        if (d < settings.triggerRadius && !advancedRef.current) {
-          advancedRef.current = true;
-          setIsApproaching(false);
-          if (audio && settings.audioCrossed) playCrossed(audio);
-          if (settings.vibration) navigator.vibrate?.(400);
-          setCurrentIndex((i) => i + 1);
+        if (advancedRef.current) return;
+
+        // Normal cross: inside the trigger radius
+        if (d < s.triggerRadius) {
+          advance();
+          return;
+        }
+
+        // Overshoot recovery: we clearly approached the waypoint (got within ~2.5× radius)
+        // but the radius itself was never tripped, and we are now moving away by a full
+        // radius beyond the closest point — treat it as passed so navigation never stalls.
+        const armed = minDistRef.current < s.triggerRadius * 2.5;
+        if (armed && d > minDistRef.current + s.triggerRadius) {
+          advance();
         }
       },
       (err) => setGpsError(err.message),
@@ -316,7 +366,7 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [current, settings.audioApproach, settings.audioCrossed, settings.triggerRadius, settings.vibration]);
+  }, [current]);
 
   // ── Debug helpers ─────────────────────────────────────────────────────────
 
@@ -351,7 +401,7 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
 
   if (isFinished) {
     return (
-      <div className="w-screen h-screen bg-black flex flex-col items-center justify-center gap-6 select-none">
+      <div className="w-screen h-[100dvh] bg-black flex flex-col items-center justify-center gap-6 select-none">
         <div className="w-72 h-72 rounded-full bg-[#222] flex items-center justify-center">
           <ArrowDisplay arrowType="finish" />
         </div>
@@ -379,7 +429,7 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
   const showSecondaryRow = settings.showOdometer || (settings.showNextPreview && nextWp);
 
   return (
-    <div className="w-screen h-screen bg-black flex flex-col justify-between items-center py-10 select-none">
+    <div className="w-screen h-[100dvh] bg-black flex flex-col justify-between items-center py-10 select-none">
 
       {/* Top bar */}
       <div className="w-full flex items-center px-3 gap-1">
@@ -416,21 +466,21 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
               setCurrentIndex((i) => Math.max(0, i - 1));
             }}
             disabled={currentIndex === 0}
-            className="cursor-pointer text-sm text-gray-500 hover:text-gray-200 active:text-white transition-colors px-4 py-3 disabled:opacity-25 disabled:pointer-events-none min-w-[70px] text-center"
+            className="cursor-pointer text-sm text-gray-500 hover:text-gray-200 active:text-white transition-colors px-4 min-h-[56px] disabled:opacity-25 disabled:pointer-events-none min-w-[72px] text-center"
             aria-label="Previous waypoint"
           >
             ← Prev
           </button>
           <button
             onClick={handleSkip}
-            className="cursor-pointer text-sm text-gray-500 hover:text-gray-200 active:text-white transition-colors px-4 py-3 min-w-[70px] text-center"
+            className="cursor-pointer text-sm text-gray-500 hover:text-gray-200 active:text-white transition-colors px-4 min-h-[56px] min-w-[72px] text-center"
             aria-label="Skip waypoint"
           >
             Skip →
           </button>
           <button
             onClick={() => setShowSettings(true)}
-            className="cursor-pointer w-12 h-12 flex items-center justify-center text-gray-500 hover:text-gray-300 active:text-white transition-colors"
+            className="cursor-pointer w-14 h-14 flex items-center justify-center text-gray-500 hover:text-gray-300 active:text-white transition-colors"
             aria-label="Nav settings"
           >
             <SettingsIcon />
@@ -454,7 +504,7 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
       )}
 
       {/* Arrow circle */}
-      <div className="relative flex-shrink-0 w-72 h-72">
+      <div className="relative flex-shrink-0" style={{ width: 'min(72vw, 18rem)', height: 'min(72vw, 18rem)' }}>
         {isApproaching && (
           <div className="absolute inset-0 rounded-full bg-amber-500/20 animate-ping" />
         )}
@@ -469,13 +519,30 @@ export default function MotorbikeUi({ waypoints, onExit }: Props) {
         >
           {current && <ArrowDisplay arrowType={current.arrowType} />}
         </div>
+
+        {/* Compass tick — points to the next waypoint relative to travel direction */}
+        {settings.showCompass && relBearing !== null && !gpsError && (
+          <div
+            className="absolute inset-0 pointer-events-none transition-transform duration-300 ease-out"
+            style={{ transform: `rotate(${relBearing}deg)` }}
+            aria-hidden
+          >
+            <svg
+              className="absolute left-1/2 -translate-x-1/2"
+              style={{ top: -3 }}
+              width={20} height={15} viewBox="0 0 20 15"
+            >
+              <path d="M10 0L19 14H1L10 0Z" fill="rgba(251,191,36,0.95)" />
+            </svg>
+          </div>
+        )}
       </div>
 
       {/* Bottom info */}
       <div className="flex flex-col items-center gap-2 px-6 text-center w-full max-w-xs">
 
         {/* Main distance */}
-        <span className={`text-6xl font-black tabular-nums leading-none whitespace-nowrap ${gpsError ? 'text-red-400' : 'text-white'}`}>
+        <span className={`text-[clamp(2.75rem,15vw,3.75rem)] font-black tabular-nums leading-none whitespace-nowrap ${gpsError ? 'text-red-400' : 'text-white'}`}>
           {distance !== null ? formatDistance(distance) : '—'}
         </span>
 

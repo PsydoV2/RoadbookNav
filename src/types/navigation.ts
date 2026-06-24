@@ -20,6 +20,7 @@ export interface NavSettings {
   showLabel: boolean;
   showOdometer: boolean;
   showNextPreview: boolean;
+  showCompass: boolean;
   audioApproach: boolean;
   audioCrossed: boolean;
   vibration: boolean;
@@ -31,6 +32,7 @@ export const DEFAULT_NAV_SETTINGS: NavSettings = {
   showLabel: true,
   showOdometer: true,
   showNextPreview: true,
+  showCompass: false,   // off by default — keeps the glance-screen minimal
   audioApproach: true,
   audioCrossed: true,
   vibration: true,

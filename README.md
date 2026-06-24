@@ -8,9 +8,9 @@ Built for trail riding and motorcycle rallies where paper tulip cards are still 
 
 ## What it does
 
-**Editor mode** — an interactive map where you click to place sequential waypoints, assign a direction arrow to each (straight, left, right, U-turn, etc.), and optionally label them. Multiple tracks can be open simultaneously. Export any track as a `.json` file.
+**Editor mode** — an interactive map where you click to place sequential waypoints, assign a direction arrow to each (straight, left, right, U-turn, etc.), and optionally label them. Multiple tracks can be open simultaneously. Export any track as a `.json` file or import a `.gpx` route as a visual overlay.
 
-**Navigation mode** — a full-screen display showing one thing at a time: a large directional arrow and a live distance countdown to the next waypoint. At 25 m, the display advances automatically and the phone vibrates. The screen stays on via the WakeLock API.
+**Navigation mode** — a full-screen display showing one thing at a time: a large directional arrow and a live distance countdown to the next waypoint. When you enter the trigger radius the display advances automatically, the phone vibrates, and a beep plays. The screen stays on via the WakeLock API.
 
 ```
 ┌──────────────────────┐
@@ -24,6 +24,8 @@ Built for trail riding and motorcycle rallies where paper tulip cards are still 
 │    → Forest Fork     │
 └──────────────────────┘
 ```
+
+A settings panel lets you toggle the waypoint counter, label, odometer, and next-waypoint preview on or off, and configure audio beeps (approach at 150 m, crossed) and vibration. The auto-advance trigger radius is adjustable: 15 m, 25 m, or 50 m.
 
 ---
 
@@ -41,10 +43,11 @@ Built for trail riding and motorcycle rallies where paper tulip cards are still 
 | | |
 |---|---|
 | Framework | Next.js 16 (App Router, static export) |
-| Language | TypeScript (strict) |
+| Language | TypeScript 6 (strict) |
 | Styling | Tailwind CSS v4 |
-| Maps | Leaflet 1.9 + react-leaflet (editor only) |
+| Maps | Leaflet 1.9 + react-leaflet v5 (editor only) |
 | Runtime | React 19 |
+| PWA | @ducanh2912/next-pwa (Workbox) |
 | Output | Static HTML/CSS/JS — no server needed |
 
 ---
@@ -97,20 +100,22 @@ For full offline capability the app needs to be installed to the home screen. Th
 ```
 src/
 ├── app/
-│   ├── layout.tsx          # Global metadata, favicon, PWA config
-│   ├── globals.css         # Tailwind import + overscroll reset
-│   ├── page.tsx            # Landing page with phone mockup
-│   ├── manifest.json       # PWA manifest
+│   ├── layout.tsx              # Global metadata, favicon, PWA config
+│   ├── globals.css             # Tailwind import + overscroll reset
+│   ├── page.tsx                # Landing page with phone mockup
+│   ├── manifest.json           # PWA manifest
 │   └── app/
-│       └── page.tsx        # App shell — switches editor ↔ navigation
+│       └── page.tsx            # App shell — switches editor ↔ navigation
 ├── components/
-│   ├── MapEditor.tsx       # Leaflet-based route planner (multi-track)
-│   ├── MotorbikeUi.tsx     # Navigation display (Haversine, GPS, WakeLock)
-│   └── InstallPwa.tsx      # Platform-aware PWA install prompt
+│   ├── MapEditor.tsx           # Leaflet-based route planner (multi-track, GPX import)
+│   ├── MotorbikeUi.tsx         # Navigation display (Haversine, GPS, WakeLock, audio)
+│   ├── NavSettingsPanel.tsx    # Bottom sheet: display toggles, audio, trigger radius
+│   ├── InstallPwa.tsx          # Platform-aware PWA install prompt
+│   └── ServiceWorkerRegistration.tsx
 └── types/
-    └── navigation.ts       # Waypoint and Track interfaces
+    └── navigation.ts           # Waypoint/Track types + shared constants (ARROW_TYPES, ARROW_FILE, APPROACH_DISTANCE_M)
 public/
-└── arrows/                 # SVG direction icons used in both editor and nav
+└── arrows/                     # SVG direction icons used in both editor and nav
 ```
 
 ---
@@ -149,9 +154,11 @@ Import auto-detects the format. A `Waypoint[]` import creates a new track; a `Tr
 |---|---|
 | `start` | Starting point |
 | `straight` | Straight ahead |
-| `left` | Turn left |
-| `right` | Turn right |
 | `slight-left` | Bear left |
+| `left` | Turn left |
+| `sharp-left` | Sharp left |
 | `slight-right` | Bear right |
+| `right` | Turn right |
+| `sharp-right` | Sharp right |
 | `u-turn` | U-turn |
 | `finish` | Destination |

@@ -516,11 +516,13 @@ function SortableWaypointChip({
   index,
   color,
   onDelete,
+  onEdit,
 }: {
   wp: Waypoint;
   index: number;
   color: string;
   onDelete: () => void;
+  onEdit: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: wp.id });
   const style = {
@@ -533,17 +535,22 @@ function SortableWaypointChip({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex-shrink-0 flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs bg-[#1e1e1e] border border-white/20"
+      {...attributes}
+      {...listeners}
+      onClick={onEdit}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onEdit();
+        }
+      }}
+      className="flex-shrink-0 flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs bg-[#1e1e1e] border border-white/20 cursor-grab active:cursor-grabbing touch-none select-none focus:outline-none focus:ring-1 focus:ring-white/40"
     >
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="cursor-grab active:cursor-grabbing touch-none text-gray-500 hover:text-gray-300 transition-colors -ml-0.5 mr-0.5 p-0.5"
-        aria-label="Drag to reorder"
-      >
+      <span className="text-gray-500 -ml-0.5 mr-0.5">
         <GripIcon />
-      </button>
+      </span>
       <span
         className="w-4 h-4 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0"
         style={{ background: color, fontSize: 9 }}
@@ -553,7 +560,8 @@ function SortableWaypointChip({
       {wp.label && <span className="text-white max-w-20 truncate">{wp.label}</span>}
       <ArrowIcon type={wp.arrowType} active={false} size={14} />
       <button
-        onClick={onDelete}
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        onPointerDown={(e) => e.stopPropagation()}
         className={`ml-0.5 ${BTN_ICON_DEL}`}
         aria-label="Delete"
       >
@@ -567,10 +575,12 @@ function WaypointStrip({
   track,
   onReorder,
   onDelete,
+  onEdit,
 }: {
   track: Track;
   onReorder: (fromIndex: number, toIndex: number) => void;
   onDelete: (wp: Waypoint) => void;
+  onEdit: (wp: Waypoint, index: number) => void;
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -599,6 +609,7 @@ function WaypointStrip({
                 index={i}
                 color={track.color}
                 onDelete={() => onDelete(wp)}
+                onEdit={() => onEdit(wp, i)}
               />
             ))}
           </div>
@@ -1226,6 +1237,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
           track={activeTrack}
           onReorder={(from, to) => handleReorderWaypoint(activeTrack.id, from, to)}
           onDelete={(wp) => handleDeleteWaypoint(activeTrack.id, wp.id, wp.label)}
+          onEdit={(wp, index) => setEditingWaypoint({ trackId: activeTrack.id, waypoint: wp, index })}
         />
       )}
 

@@ -4,7 +4,47 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-html,
-body {
+/* Pull-to-refresh stays enabled on the landing page; only the in-app
+   routes opt out so dragging the map doesn't trigger a reload. */
+body[data-overscroll="none"] {
   overscroll-behavior: none;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────────────
+   Subtle dark-theme scrollbar that matches the landing page. Firefox uses
+   `scrollbar-*` properties; Chrome/Safari/Edge/Opera use the WebKit
+   pseudo-elements. Mobile browsers render overlay scrollbars and ignore
+   both, which is the behaviour we want. */
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.32);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: rgba(255, 255, 255, 0.45);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }

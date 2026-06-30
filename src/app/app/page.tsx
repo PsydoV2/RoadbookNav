@@ -29,6 +29,13 @@ export default function AppPage() {
     setHydrated(true);
   }, []);
 
+  useEffect(() => {
+    document.body.dataset.overscroll = 'none';
+    return () => {
+      delete document.body.dataset.overscroll;
+    };
+  }, []);
+
   const handleChange = (newTracks: Track[], newActiveId: string | null) => {
     setTracks(newTracks);
     setActiveTrackId(newActiveId);

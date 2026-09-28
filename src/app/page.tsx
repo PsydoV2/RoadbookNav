@@ -1,5 +1,6 @@
 import Link from "next/link";
 import InstallPwa from "@/components/InstallPwa";
+import PromoVideo from "@/components/PromoVideo";
 
 export default function Home() {
   const appSchema = {
@@ -20,6 +21,18 @@ export default function Home() {
       "GPX import",
       "No account or tracking",
     ],
+  };
+
+  const videoSchema = {
+    "@context": "https://schema.org",
+    "@type": "VideoObject",
+    name: "Roadbook Nav in 22 seconds",
+    description:
+      "Plan a motorcycle route at home, load it on your phone, ride it fully offline with a digital tulip roadbook.",
+    thumbnailUrl: "https://roadbook.sfalter.de/video/brag-poster.webp",
+    contentUrl: "https://roadbook.sfalter.de/video/brag-1080.mp4",
+    uploadDate: "2026-09-28",
+    duration: "PT22S",
   };
 
   const faqSchema = {
@@ -54,6 +67,10 @@ export default function Home() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(videoSchema) }}
       />
 
       {/* ── Nav ── */}
@@ -101,6 +118,23 @@ export default function Home() {
 
         {/* Phone mockup */}
         <PhoneMockup />
+      </section>
+
+      {/* ── Video ── */}
+      <section className="border-t border-white/10 py-24 px-8">
+        <div className="max-w-5xl mx-auto flex flex-col gap-10">
+          <div className="flex flex-col gap-3">
+            <p className="text-gray-500 text-sm uppercase tracking-widest">
+              See it in action
+            </p>
+            <h2 className="text-3xl font-black leading-tight">
+              22 seconds. Plan, load, ride.
+            </h2>
+          </div>
+          <div className="rounded-xl overflow-hidden border border-white/15 shadow-2xl">
+            <PromoVideo />
+          </div>
+        </div>
       </section>
 
       {/* ── Editor ── */}

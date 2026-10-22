@@ -86,7 +86,7 @@ export default function RootLayout({
         <ServiceWorkerRegistration />
         <Script
           defer
-          src="https://umami.sfalter.de/script.js"
+          src="https://webstats.sfalter.de/script.js"
           data-website-id="d4b23bd6-589b-446f-ae8c-1cd4cd4bbbab"
         />
       </body>

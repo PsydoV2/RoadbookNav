@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
+import { OG_IMAGE, SITE_NAME, SITE_URL } from "@/lib/site";
 
-const SITE_URL = "https://roadbook.sfalter.de/";
-
+// Canonicals are set per page — a root-level canonical would leak into every route.
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
@@ -12,8 +12,8 @@ export const metadata: Metadata = {
     template: "%s · Roadbook Nav",
   },
   description:
-    "A bare-minimum digital roadbook for motorcycle rally, enduro and trail riding. Plan waypoints at home, export a JSON, navigate fully offline — no maps, no accounts, no tracking.",
-  applicationName: "Roadbook Nav",
+    "Offline digital roadbook for motorcycle rally, enduro and trail riding. Plan waypoints at home, then ride with one arrow and one distance. No signal, no account.",
+  applicationName: SITE_NAME,
   keywords: [
     "digital roadbook",
     "motorcycle navigation",
@@ -25,8 +25,7 @@ export const metadata: Metadata = {
     "roadbook app",
     "waypoint navigation",
   ],
-  authors: [{ name: "Roadbook Nav" }],
-  alternates: { canonical: "/" },
+  authors: [{ name: SITE_NAME, url: SITE_URL }],
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -39,31 +38,23 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Roadbook Nav",
+    title: SITE_NAME,
   },
   openGraph: {
     type: "website",
-    siteName: "Roadbook Nav",
+    siteName: SITE_NAME,
     title: "Roadbook Nav — Offline Motorcycle Roadbook & Rally Navigation",
     description:
       "Plan waypoints at home, ride fully offline. One arrow, one distance — the paper tulip card, digitised. No signal required.",
-    url: SITE_URL,
-    locale: "en",
-    images: [
-      {
-        url: "/editor_preview.png",
-        width: 1918,
-        height: 1079,
-        alt: "Roadbook Nav editor — a route planned through forest terrain",
-      },
-    ],
+    locale: "en_US",
+    images: [OG_IMAGE],
   },
   twitter: {
     card: "summary_large_image",
     title: "Roadbook Nav — Offline Motorcycle Roadbook Navigation",
     description:
       "Plan waypoints at home, ride fully offline. One arrow, one distance. No signal required.",
-    images: ["/editor_preview.png"],
+    images: [OG_IMAGE.url],
   },
 };
 

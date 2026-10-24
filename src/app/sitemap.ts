@@ -1,24 +1,30 @@
 import type { MetadataRoute } from "next";
-
-const SITE_URL = "https://roadbook.sfalter.de/";
+import { LAST_UPDATED, SITE_URL } from "@/lib/site";
 
 // Static export: emitted as /sitemap.xml at build time.
 export const dynamic = "force-static";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const now = new Date();
+  // Fixed date instead of build time — a lastmod that changes on every deploy gets ignored.
+  const lastModified = new Date(LAST_UPDATED);
   return [
     {
-      url: `${SITE_URL}`,
-      lastModified: now,
+      url: `${SITE_URL}/`,
+      lastModified,
       changeFrequency: "monthly",
       priority: 1,
     },
     {
-      url: `${SITE_URL}app/`,
-      lastModified: now,
+      url: `${SITE_URL}/guide/tulip-roadbook/`,
+      lastModified,
+      changeFrequency: "yearly",
+      priority: 0.7,
+    },
+    {
+      url: `${SITE_URL}/app/`,
+      lastModified,
       changeFrequency: "monthly",
-      priority: 0.8,
+      priority: 0.6,
     },
   ];
 }

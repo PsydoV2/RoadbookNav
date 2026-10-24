@@ -1,59 +1,80 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import InstallPwa from "@/components/InstallPwa";
 import PromoVideo from "@/components/PromoVideo";
+import { FAQS, LAST_UPDATED, OG_IMAGE, SITE_NAME, SITE_URL } from "@/lib/site";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    url: "/",
+    title: "Roadbook Nav — Offline Motorcycle Roadbook & Rally Navigation",
+    description:
+      "Plan waypoints at home, ride fully offline. One arrow, one distance — the paper tulip card, digitised. No signal required.",
+    locale: "en_US",
+    images: [OG_IMAGE],
+  },
+};
 
 export default function Home() {
-  const appSchema = {
+  const schema = {
     "@context": "https://schema.org",
-    "@type": "WebApplication",
-    name: "Roadbook Nav",
-    applicationCategory: "TravelApplication",
-    operatingSystem: "Web, Android, iOS",
-    description:
-      "A bare-minimum digital roadbook for motorcycle rally, enduro and trail riding. Plan waypoints at home, navigate fully offline.",
-    url: "https://roadbook.sfalter.de//",
-    browserRequirements: "Requires JavaScript. Works offline once installed.",
-    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-    featureList: [
-      "Offline GPS navigation",
-      "Digital tulip roadbook display",
-      "Adjustable auto-advance trigger radius",
-      "GPX import",
-      "No account or tracking",
-    ],
-  };
-
-  const videoSchema = {
-    "@context": "https://schema.org",
-    "@type": "VideoObject",
-    name: "Roadbook Nav in 22 seconds",
-    description:
-      "Plan a motorcycle route at home, load it on your phone, ride it fully offline with a digital tulip roadbook.",
-    thumbnailUrl: "https://roadbook.sfalter.de/video/brag-poster.webp",
-    contentUrl: "https://roadbook.sfalter.de/video/brag-1080.mp4",
-    uploadDate: "2026-09-28",
-    duration: "PT22S",
-  };
-
-  const faqSchema = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: [
+    "@graph": [
       {
-        "@type": "Question",
-        name: "How does motorcycle navigation work without internet in a forest?",
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: "Plan your route at home using the map editor and export it as a single JSON file. On your bike, import that file into the app. From that point everything runs offline — the app computes your distance to each waypoint using GPS coordinates and the Haversine formula, no internet connection required.",
-        },
+        "@type": "WebSite",
+        "@id": `${SITE_URL}/#website`,
+        url: `${SITE_URL}/`,
+        name: SITE_NAME,
+        inLanguage: "en",
+        publisher: { "@id": `${SITE_URL}/#app` },
       },
       {
-        "@type": "Question",
-        name: "What is a digital roadbook?",
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: "A digital roadbook is the modern equivalent of the paper tulip cards used in motorcycle rallies. Instead of a roll of paper on the handlebars, a screen shows one waypoint at a time — direction arrow and distance. This app strips it down further: one large arrow, one countdown. Nothing else.",
-        },
+        "@type": "WebApplication",
+        "@id": `${SITE_URL}/#app`,
+        name: SITE_NAME,
+        url: `${SITE_URL}/app/`,
+        applicationCategory: "TravelApplication",
+        applicationSubCategory: "Motorcycle navigation",
+        operatingSystem: "Any — runs in a modern mobile or desktop browser",
+        inLanguage: "en",
+        description:
+          "Offline digital roadbook for motorcycle rally, enduro and trail riding. Plan waypoints at home, then navigate with one arrow and one distance — no signal, no account.",
+        image: `${SITE_URL}${OG_IMAGE.url}`,
+        screenshot: `${SITE_URL}/editor_preview.webp`,
+        browserRequirements: "Requires JavaScript. Works offline once installed.",
+        isAccessibleForFree: true,
+        dateModified: LAST_UPDATED,
+        offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
+        featureList: [
+          "Offline GPS navigation, no map tiles while riding",
+          "Digital tulip roadbook display: one arrow, one distance",
+          "Auto-advance trigger radius of 15, 25 or 50 m",
+          "GPX track overlay with snap-to-track waypoint placement",
+          "Audio cues and vibration at each waypoint",
+          "Multiple route variants, JSON import and export",
+          "No account, no tracking, data stays on the device",
+        ],
+      },
+      {
+        "@type": "FAQPage",
+        "@id": `${SITE_URL}/#faq`,
+        mainEntity: FAQS.map(({ q, a }) => ({
+          "@type": "Question",
+          name: q,
+          acceptedAnswer: { "@type": "Answer", text: a },
+        })),
+      },
+      {
+        "@type": "VideoObject",
+        name: "Roadbook Nav in 22 seconds",
+        description:
+          "Plan a motorcycle route at home, load it on your phone, ride it fully offline with a digital tulip roadbook.",
+        thumbnailUrl: `${SITE_URL}/video/brag-poster.webp`,
+        contentUrl: `${SITE_URL}/video/brag-1080.mp4`,
+        uploadDate: "2026-09-28",
+        duration: "PT22S",
       },
     ],
   };
@@ -62,15 +83,7 @@ export default function Home() {
     <main className="min-h-screen bg-black text-white">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(appSchema) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(videoSchema) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
       />
 
       {/* ── Nav ── */}
@@ -88,6 +101,9 @@ export default function Home() {
       <section className="min-h-screen flex flex-col md:flex-row items-center justify-center gap-16 px-8 pt-24 pb-20 max-w-6xl mx-auto">
         <div className="flex flex-col gap-6 max-w-lg">
           <h1 className="text-5xl md:text-6xl font-black leading-[1.05] tracking-tight">
+            <span className="block text-gray-500 text-sm md:text-base font-semibold uppercase tracking-widest mb-4">
+              Offline motorcycle roadbook
+            </span>
             Navigate forests.
             <br />
             No signal
@@ -95,9 +111,9 @@ export default function Home() {
             required.
           </h1>
           <p className="text-gray-400 text-lg leading-relaxed max-w-md">
-            A bare-minimum roadbook display for motorcycle trips. Plan waypoints
-            at home, export a JSON, import on your phone, ride. No live maps. No
-            accounts. No tracking.
+            A bare-minimum digital roadbook for rally, enduro and trail riding.
+            Plan waypoints at home, export a JSON, import on your phone, ride.
+            No live maps. No accounts. No tracking.
           </p>
           <div className="flex flex-wrap items-center gap-3 mt-2">
             <Link
@@ -165,6 +181,10 @@ export default function Home() {
                     "Reposition markers directly on the map or reorder them in the strip below.",
                   ],
                   [
+                    "Trace a GPX",
+                    "Load a GPX track as an overlay — clicks near the line snap onto it.",
+                  ],
+                  [
                     "Multiple tracks",
                     "Build route variants side by side and switch between them instantly.",
                   ],
@@ -204,9 +224,9 @@ export default function Home() {
         className="border-t border-white/10 py-24 px-8"
       >
         <div className="max-w-3xl mx-auto">
-          <p className="text-gray-500 text-sm uppercase tracking-widest mb-10">
+          <h2 className="text-gray-500 text-sm font-normal uppercase tracking-widest mb-10">
             How it works
-          </p>
+          </h2>
           <div className="grid md:grid-cols-3 gap-12">
             {[
               {
@@ -222,14 +242,14 @@ export default function Home() {
               {
                 n: "03",
                 title: "Ride",
-                body: "A full-screen arrow and a live distance countdown. At 25 m from each waypoint, the display advances automatically and the phone vibrates.",
+                body: "A full-screen arrow and a live distance countdown. Inside the trigger radius (25 m by default, 15 or 50 m selectable), the display advances automatically with an audio cue and vibration.",
               },
             ].map((step) => (
               <div key={step.n} className="flex flex-col gap-3">
                 <span className="text-gray-500 font-mono text-sm">
                   {step.n}
                 </span>
-                <h2 className="font-bold text-xl">{step.title}</h2>
+                <h3 className="font-bold text-xl">{step.title}</h3>
                 <p className="text-gray-400 leading-relaxed text-sm">
                   {step.body}
                 </p>
@@ -243,9 +263,9 @@ export default function Home() {
       <section className="border-t border-white/10 py-24 px-8 bg-[#050505]">
         <div className="max-w-3xl mx-auto grid md:grid-cols-2 gap-16">
           <div>
-            <p className="text-gray-500 text-sm uppercase tracking-widest mb-8">
+            <h2 className="text-gray-500 text-sm font-normal uppercase tracking-widest mb-8">
               What it doesn&apos;t do
-            </p>
+            </h2>
             <ul className="flex flex-col gap-3 text-gray-400 text-sm">
               {[
                 "Fetch map tiles while navigating",
@@ -262,15 +282,16 @@ export default function Home() {
             </ul>
           </div>
           <div>
-            <p className="text-gray-500 text-sm uppercase tracking-widest mb-8">
+            <h2 className="text-gray-500 text-sm font-normal uppercase tracking-widest mb-8">
               Under the hood
-            </p>
+            </h2>
             <ul className="flex flex-col gap-3 text-sm">
               {[
                 ["Distance", "Haversine formula, pure JavaScript"],
-                ["Trigger radius", "25 m around each waypoint"],
+                ["Trigger radius", "15 / 25 / 50 m, 25 m by default"],
                 ["Screen", "WakeLock API keeps the display on"],
-                ["Haptics", "navigator.vibrate(400) at each point"],
+                ["Feedback", "Audio cues + navigator.vibrate (not on iOS)"],
+                ["GPX", "Overlay track with snap-to-line placement"],
                 ["Storage", "localStorage — no server involved"],
                 ["Build", "Next.js static export, runs anywhere"],
               ].map(([label, value]) => (
@@ -338,47 +359,27 @@ export default function Home() {
       {/* ── FAQ ── */}
       <section className="border-t border-white/10 py-24 px-8">
         <div className="max-w-2xl mx-auto">
-          <p className="text-gray-500 text-sm uppercase tracking-widest mb-10">
+          <h2 className="text-gray-500 text-sm font-normal uppercase tracking-widest mb-10">
             FAQ
-          </p>
+          </h2>
           <div className="flex flex-col gap-10">
-            <div>
-              <h3 className="font-semibold text-white mb-2">
-                How does motorcycle navigation work without internet in a
-                forest?
-              </h3>
-              <p className="text-gray-400 text-sm leading-relaxed">
-                You plan the route at home with a regular internet connection
-                (the map editor needs tiles). Export a JSON. On your bike,
-                import it into the app — from that point the only thing running
-                is the GPS receiver in your phone and a distance formula. No
-                pings, no tiles, no fallback API.
-              </p>
-            </div>
-            <div>
-              <h3 className="font-semibold text-white mb-2">
-                What is a digital roadbook?
-              </h3>
-              <p className="text-gray-400 text-sm leading-relaxed">
-                The paper tulip cards strapped to rally handlebars, digitised.
-                Each card shows one instruction — a direction and a distance.
-                This app does the same thing on a phone screen, advances
-                automatically as you ride, and keeps it to the minimum: one
-                arrow, one number.
-              </p>
-            </div>
-            <div>
-              <h3 className="font-semibold text-white mb-2">
-                Does it work as a PWA / installable app?
-              </h3>
-              <p className="text-gray-400 text-sm leading-relaxed">
-                Yes. Add it to your home screen from your mobile browser. The
-                navigation mode runs entirely offline. The map editor requires
-                internet to load OpenStreetMap tiles, so use that at home before
-                you leave.
-              </p>
-            </div>
+            {/* Same array feeds the FAQPage schema — keep visible text and JSON-LD identical. */}
+            {FAQS.map(({ q, a }) => (
+              <div key={q}>
+                <h3 className="font-semibold text-white mb-2">{q}</h3>
+                <p className="text-gray-400 text-sm leading-relaxed">{a}</p>
+              </div>
+            ))}
           </div>
+          <p className="text-gray-500 text-sm mt-12">
+            New to roadbooks?{" "}
+            <Link
+              href="/guide/tulip-roadbook/"
+              className="text-white underline underline-offset-4 hover:text-gray-300"
+            >
+              Read the guide: what a tulip roadbook is and how to make one →
+            </Link>
+          </p>
         </div>
       </section>
 
@@ -395,8 +396,16 @@ export default function Home() {
         </Link>
       </section>
 
-      <footer className="border-t border-white/10 px-8 py-6 text-center text-gray-500 text-xs">
-        Built for people who ride where there&apos;s no signal.
+      <footer className="border-t border-white/10 px-8 py-6 flex flex-col sm:flex-row items-center justify-center gap-x-6 gap-y-2 text-center text-gray-500 text-xs">
+        <span>Built for people who ride where there&apos;s no signal.</span>
+        <nav aria-label="Footer" className="flex gap-4">
+          <Link href="/app/" className="hover:text-gray-300">
+            App
+          </Link>
+          <Link href="/guide/tulip-roadbook/" className="hover:text-gray-300">
+            Tulip roadbook guide
+          </Link>
+        </nav>
       </footer>
     </main>
   );
@@ -418,16 +427,16 @@ function EditorMockup() {
           <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]/80" />
         </div>
         <div className="flex-1 bg-[#0d0d0d] border border-white/10 rounded-md px-3 py-1 text-[11px] text-gray-500 font-mono truncate">
-          roadbooknav.app/app/
+          roadbook.sfalter.de/app/
         </div>
       </div>
       {/* Screenshot */}
       <img
-        src="/editor_preview.png"
-        alt="Roadbook Nav editor — route planned through forest terrain"
+        src="/editor_preview.webp"
+        alt="Roadbook Nav editor — waypoints with turn arrows placed along a route through forest terrain"
         className="w-full block h-auto"
-        width={1918}
-        height={1079}
+        width={1600}
+        height={900}
         loading="lazy"
         decoding="async"
         draggable={false}

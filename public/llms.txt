@@ -1,0 +1,24 @@
+# Roadbook Nav
+
+> Free, offline-first digital roadbook for motorcycle rally, enduro and trail riding. Plan waypoints on a map at home, export one JSON file, and navigate on your phone with one large direction arrow and a live distance countdown — no mobile signal, no account, no tracking.
+
+Roadbook Nav is a progressive web app (PWA) that runs in any modern browser and can be installed to the home screen on Android and iOS.
+
+## Key facts
+
+- Navigation runs fully offline once the app is installed: no map tiles, no network requests while riding. Distance is computed from GPS with the Haversine formula.
+- The route editor needs internet (OpenStreetMap tiles) and is meant to be used before the ride.
+- Each waypoint has a turn arrow (straight, slight/normal/sharp left or right, U-turn, start, finish) and an optional label.
+- Auto-advance trigger radius: 15, 25 (default) or 50 m.
+- Feedback at each waypoint: audio cues and vibration (vibration is not available on iOS Safari).
+- GPX files can be loaded as an overlay; waypoint clicks snap onto the track.
+- Multiple route variants per device; JSON import and export.
+- Data stays on the device (localStorage and exported files). No account, no server, no location sharing.
+- Not a turn-by-turn road navigator and does not show a moving map while navigating.
+- Price: free.
+
+## Pages
+
+- [Home](https://roadbook.sfalter.de/): overview, how it works, FAQ
+- [App: route editor and navigation](https://roadbook.sfalter.de/app/)
+- [Guide: what a tulip roadbook is and how to make a digital one](https://roadbook.sfalter.de/guide/tulip-roadbook/)

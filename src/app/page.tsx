@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import InstallPwa from "@/components/InstallPwa";
 import PromoVideo from "@/components/PromoVideo";
-import { FAQS, LAST_UPDATED, OG_IMAGE, SITE_NAME, SITE_URL } from "@/lib/site";
+import { FAQS, GUIDES, LAST_UPDATED, OG_IMAGE, SITE_NAME, SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
@@ -51,9 +51,15 @@ export default function Home() {
           "Offline GPS navigation, no map tiles while riding",
           "Digital tulip roadbook display: one arrow, one distance",
           "Auto-advance trigger radius of 15, 25 or 50 m",
+          "Speed-based approach warning about 9 seconds ahead",
           "GPX track overlay with snap-to-track waypoint placement",
           "Audio cues and vibration at each waypoint",
-          "Multiple route variants, JSON import and export",
+          "Multiple route variants, JSON and GPX import and export",
+          "Send a route to the phone with a QR code, no upload",
+          "Rally-style trip meter with 10 m correction",
+          "Fork, roundabout-exit and ! / !! / !!! hazard symbols",
+          "Resume an interrupted ride, download the ridden track as GPX",
+          "Sunlight mode and landscape layout",
           "No account, no tracking, data stays on the device",
         ],
       },
@@ -112,7 +118,7 @@ export default function Home() {
           </h1>
           <p className="text-gray-400 text-lg leading-relaxed max-w-md">
             A bare-minimum digital roadbook for rally, enduro and trail riding.
-            Plan waypoints at home, export a JSON, import on your phone, ride.
+            Plan waypoints at home, scan a QR code with your phone, ride.
             No live maps. No accounts. No tracking.
           </p>
           <div className="flex flex-wrap items-center gap-3 mt-2">
@@ -166,8 +172,8 @@ export default function Home() {
             <p className="text-gray-400 text-sm leading-relaxed">
               The editor runs in your browser — no install, no account. Drop
               waypoints on a live map, assign a direction to each turn, then
-              export a single JSON file. That file is everything the navigation
-              needs.
+              send it to your phone with a QR code. The route travels inside
+              the link itself — nothing is uploaded.
             </p>
             <ul className="flex flex-col gap-3 text-sm">
               {(
@@ -189,8 +195,8 @@ export default function Home() {
                     "Build route variants side by side and switch between them instantly.",
                   ],
                   [
-                    "Export and go",
-                    "One JSON file per route. Import it on your phone in two taps.",
+                    "Send and go",
+                    "Scan the QR code on your phone, or export JSON or GPX files if you prefer.",
                   ],
                 ] as const
               ).map(([title, desc]) => (
@@ -232,12 +238,12 @@ export default function Home() {
               {
                 n: "01",
                 title: "Plan",
-                body: "Open the map editor at home. Click to place waypoints. Assign a direction to each — straight, bear left, sharp right, U-turn. Save your route as a file.",
+                body: "Open the map editor at home. Click to place waypoints. Assign a direction to each — straight, bear left, sharp right, fork, roundabout exit — and mark hazards.",
               },
               {
                 n: "02",
                 title: "Load",
-                body: "Open the app on your phone and import the saved file. Two seconds. No sync, no cloud, no account required.",
+                body: "Scan the QR code from the editor with your phone. The route opens in the app and is saved there. No sync, no cloud, no account required.",
               },
               {
                 n: "03",
@@ -291,7 +297,9 @@ export default function Home() {
                 ["Trigger radius", "15 / 25 / 50 m, 25 m by default"],
                 ["Screen", "WakeLock API keeps the display on"],
                 ["Feedback", "Audio cues + navigator.vibrate (not on iOS)"],
-                ["GPX", "Overlay track with snap-to-line placement"],
+                ["GPX", "Overlay with snap-to-line placement, GPX export"],
+                ["Sharing", "Route compressed into the link itself, shown as QR"],
+                ["Trip meter", "GPS distance with jitter filter, ±10 m correction"],
                 ["Storage", "localStorage — no server involved"],
                 ["Build", "Next.js static export, runs anywhere"],
               ].map(([label, value]) => (
@@ -356,6 +364,40 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── Example route ── */}
+      <section id="example" className="border-t border-white/10 py-24 px-8">
+        <div className="max-w-3xl mx-auto grid md:grid-cols-2 gap-12 items-center">
+          <div className="flex flex-col gap-4">
+            <p className="text-gray-500 text-sm uppercase tracking-widest">
+              Try it without planning
+            </p>
+            <h2 className="text-3xl font-black leading-tight">
+              Open an example roadbook.
+            </h2>
+            <p className="text-gray-400 text-sm leading-relaxed">
+              A real forest loop with 29 waypoints, forks and hazard marks.
+              Open it in the editor, press Preview and step through it like on
+              the bike, or download the file to see the format.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <Link
+              href="/app/?example=forest-loop"
+              className="px-6 py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-100 transition-colors text-center"
+            >
+              Open example in the app →
+            </Link>
+            <a
+              href="/examples/forest-loop.json"
+              download
+              className="px-6 py-4 rounded-xl bg-white/5 border border-white/20 text-white text-sm hover:bg-white/10 transition-colors text-center"
+            >
+              Download forest-loop.json
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* ── FAQ ── */}
       <section className="border-t border-white/10 py-24 px-8">
         <div className="max-w-2xl mx-auto">
@@ -371,15 +413,21 @@ export default function Home() {
               </div>
             ))}
           </div>
-          <p className="text-gray-500 text-sm mt-12">
-            New to roadbooks?{" "}
-            <Link
-              href="/guide/tulip-roadbook/"
-              className="text-white underline underline-offset-4 hover:text-gray-300"
-            >
-              Read the guide: what a tulip roadbook is and how to make one →
-            </Link>
-          </p>
+          <div className="mt-12 flex flex-col gap-3">
+            <p className="text-gray-500 text-sm">Guides</p>
+            <ul className="flex flex-col gap-2">
+              {GUIDES.map((g) => (
+                <li key={g.path}>
+                  <Link
+                    href={g.path}
+                    className="text-white text-sm underline underline-offset-4 hover:text-gray-300"
+                  >
+                    {g.title} →
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -404,6 +452,12 @@ export default function Home() {
           </Link>
           <Link href="/guide/tulip-roadbook/" className="hover:text-gray-300">
             Tulip roadbook guide
+          </Link>
+          <Link href="/guide/plan-enduro-roadbook/" className="hover:text-gray-300">
+            Plan a roadbook
+          </Link>
+          <Link href="/guide/phone-as-roadbook/" className="hover:text-gray-300">
+            Phone setup
           </Link>
         </nav>
       </footer>

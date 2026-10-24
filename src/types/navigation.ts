@@ -1,9 +1,22 @@
+export type ArrowType =
+  | 'start' | 'finish'
+  | 'straight' | 'u-turn'
+  | 'slight-left' | 'slight-right'
+  | 'left' | 'right'
+  | 'sharp-left' | 'sharp-right'
+  | 'keep-left' | 'keep-right'
+  | 'roundabout';
+
+export type DangerLevel = 1 | 2 | 3;
+
 export interface Waypoint {
   id: string;
   lat: number;
   lon: number;
-  arrowType: 'start' | 'straight' | 'slight-left' | 'left' | 'sharp-left' | 'slight-right' | 'right' | 'sharp-right' | 'u-turn' | 'finish';
+  arrowType: ArrowType;
   label: string;
+  danger?: DangerLevel;   // tulip-style hazard marking: ! / !! / !!!
+  exit?: number;          // roundabout exit to take (1-based)
 }
 
 export interface Track {
@@ -24,6 +37,7 @@ export interface NavSettings {
   audioApproach: boolean;
   audioCrossed: boolean;
   vibration: boolean;
+  sunlightMode: boolean;
   triggerRadius: TriggerRadius;
 }
 
@@ -36,18 +50,37 @@ export const DEFAULT_NAV_SETTINGS: NavSettings = {
   audioApproach: true,
   audioCrossed: true,
   vibration: true,
+  sunlightMode: false,
   triggerRadius: 25,
 };
 
-export const ARROW_TYPES: Waypoint['arrowType'][] = [
+export const ARROW_TYPES: ArrowType[] = [
   'start',        'finish',
   'straight',     'u-turn',
   'slight-left',  'slight-right',
   'left',         'right',
   'sharp-left',   'sharp-right',
+  'keep-left',    'keep-right',
+  'roundabout',
 ];
 
-export const ARROW_FILE: Partial<Record<Waypoint['arrowType'], string>> = {
+export const ARROW_LABELS: Record<ArrowType, string> = {
+  start:          'Start',
+  finish:         'Finish',
+  straight:       'Straight',
+  'u-turn':       'U-turn',
+  'slight-left':  'Bear left',
+  'slight-right': 'Bear right',
+  left:           'Left',
+  right:          'Right',
+  'sharp-left':   'Sharp left',
+  'sharp-right':  'Sharp right',
+  'keep-left':    'Keep left (fork)',
+  'keep-right':   'Keep right (fork)',
+  roundabout:     'Roundabout',
+};
+
+export const ARROW_FILE: Partial<Record<ArrowType, string>> = {
   straight:       '/arrows/arrow-up-sm-svgrepo-com.svg',
   'slight-left':  '/arrows/arrow-up-left-sm-svgrepo-com.svg',
   left:           '/arrows/arrow-left-sm-svgrepo-com.svg',
@@ -58,4 +91,6 @@ export const ARROW_FILE: Partial<Record<Waypoint['arrowType'], string>> = {
   'u-turn':       '/arrows/arrow-down-sm-svgrepo-com.svg',
 };
 
-export const APPROACH_DISTANCE_M = 150;
+export const DANGER_LEVELS: DangerLevel[] = [1, 2, 3];
+
+export const MAX_ROUNDABOUT_EXIT = 6;

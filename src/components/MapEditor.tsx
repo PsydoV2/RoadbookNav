@@ -1,622 +1,53 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet';
+import type L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import {
-  DndContext,
-  PointerSensor,
-  TouchSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  horizontalListSortingStrategy,
-  useSortable,
-  sortableKeyboardCoordinates,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import type { Track, Waypoint } from '@/types/navigation';
-import { ARROW_FILE, ARROW_TYPES } from '@/types/navigation';
+import { decimate } from '@/lib/geo';
+import {
+  downloadFile,
+  ImportError,
+  parseGpx,
+  parseRoadbookJson,
+  safeFilename,
+  serializeTracks,
+  trackToGpx,
+} from '@/lib/roadbookFile';
+import { createTrack, materialize, nextColor } from '@/lib/tracks';
+import { demoTrack } from '@/lib/demo';
+import { trackEvent } from '@/lib/analytics';
+import type { NavMode } from './MotorbikeUi';
+import { makeMarkerIcon } from './editor/markerIcon';
+import { ClickHandler, FitBounds, GpxOverlay, MapSearch } from './editor/MapParts';
+import WaypointModal, { type WaypointFields } from './editor/WaypointModal';
+import WaypointStrip from './editor/WaypointStrip';
+import ShareDialog from './editor/ShareDialog';
+import { ConfirmDialog, Toast, type ConfirmAction, type ToastMessage } from './editor/Dialogs';
+import { PencilIcon, ShareIcon, UndoIcon } from './editor/icons';
+import { BTN_GHOST, BTN_ICON_DEL, BTN_MENU_ITEM, BTN_PRIMARY } from './editor/styles';
 
-// ── Constants ────────────────────────────────────────────────────────────────
+// ── GPX overlay persistence ──────────────────────────────────────────────────
 
-const TRACK_COLORS = [
-  '#ef4444', '#3b82f6', '#22c55e', '#f97316',
-  '#a855f7', '#eab308', '#ec4899', '#06b6d4',
-];
+const GPX_KEY = 'roadbook_gpx_overlay';
+const GPX_MAX_POINTS = 5000;   // plenty for snapping, keeps localStorage small
 
-const ARROW_LABELS: Record<Waypoint['arrowType'], string> = {
-  start:          'Start',
-  finish:         'Finish',
-  straight:       'Straight',
-  'u-turn':       'U-turn',
-  'slight-left':  'Bear left',
-  'slight-right': 'Bear right',
-  left:           'Left',
-  right:          'Right',
-  'sharp-left':   'Sharp left',
-  'sharp-right':  'Sharp right',
-};
-
-
-function parseGpx(text: string): [number, number][] {
-  const doc = new DOMParser().parseFromString(text, 'application/xml');
-  const points: [number, number][] = [];
-  doc.querySelectorAll('trkpt, rtept').forEach((pt) => {
-    const lat = parseFloat(pt.getAttribute('lat') ?? '');
-    const lon = parseFloat(pt.getAttribute('lon') ?? '');
-    if (!isNaN(lat) && !isNaN(lon)) points.push([lat, lon]);
-  });
-  return points;
-}
-
-
-// ── Button style tokens ──────────────────────────────────────────────────────
-
-const BTN_GHOST     = 'cursor-pointer bg-[#2a2a2a] border border-white/25 rounded-lg text-white transition-colors hover:bg-[#3d3d3d] active:bg-[#333] disabled:opacity-35 disabled:pointer-events-none';
-const BTN_PRIMARY   = 'cursor-pointer bg-white text-black font-bold rounded-lg transition-all hover:bg-gray-200 active:scale-95 disabled:opacity-35 disabled:pointer-events-none';
-const BTN_CANCEL    = 'cursor-pointer border border-white/25 rounded-xl text-gray-200 transition-colors hover:bg-white/10 active:bg-white/15';
-const BTN_DELETE    = 'cursor-pointer bg-red-500/15 border border-red-500/35 text-red-400 font-bold rounded-xl transition-colors hover:bg-red-500/30 active:bg-red-500/40';
-const BTN_ARROW_OFF = 'bg-[#2a2a2a] text-white transition-colors hover:bg-[#3d3d3d] active:bg-[#333]';
-const BTN_ICON_DEL  = 'cursor-pointer text-gray-400 transition-colors hover:text-red-400 active:text-red-500';
-
-// ── Icons ────────────────────────────────────────────────────────────────────
-
-function PencilIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
-  );
-}
-
-function UndoIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 7v6h6" />
-      <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
-    </svg>
-  );
-}
-
-function GripIcon() {
-  return (
-    <svg viewBox="0 0 16 16" width={10} height={14} fill="currentColor" aria-hidden="true">
-      <circle cx="5" cy="3" r="1.4" />
-      <circle cx="5" cy="8" r="1.4" />
-      <circle cx="5" cy="13" r="1.4" />
-      <circle cx="11" cy="3" r="1.4" />
-      <circle cx="11" cy="8" r="1.4" />
-      <circle cx="11" cy="13" r="1.4" />
-    </svg>
-  );
-}
-
-// ── ArrowIcon ────────────────────────────────────────────────────────────────
-
-function ArrowIcon({ type, active, size = 20 }: { type: Waypoint['arrowType']; active: boolean; size?: number }) {
-  const file = ARROW_FILE[type];
-  if (file) {
-    return (
-      <img
-        src={file}
-        width={size}
-        height={size}
-        alt={type}
-        style={{ filter: active ? 'none' : 'invert(1)' }}
-        draggable={false}
-      />
-    );
+function loadGpxOverlay(): [number, number][] | null {
+  try {
+    const raw = localStorage.getItem(GPX_KEY);
+    const path = raw ? JSON.parse(raw) : null;
+    return Array.isArray(path) && path.length > 0 ? path : null;
+  } catch {
+    return null;
   }
-  if (type === 'start') {
-    return (
-      <svg viewBox="0 0 24 24" width={size} height={size} fill="none">
-        <circle cx="12" cy="12" r="7" stroke={active ? '#000' : '#fff'} strokeWidth="1.5" />
-        <circle cx="12" cy="12" r="2.5" fill={active ? '#000' : '#fff'} />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none">
-      <circle cx="12" cy="12" r="7" stroke={active ? '#000' : '#fff'} strokeWidth="1.5" />
-      <path d="M9 12l2 2 4-4" stroke={active ? '#000' : '#fff'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function nextColor(tracks: Track[]): string {
-  return TRACK_COLORS[tracks.length % TRACK_COLORS.length];
-}
-
-// A short, believable forest loop so first-time users see the concept instantly
-const DEMO_POINTS: Array<Omit<Waypoint, 'id'>> = [
-  { lat: 48.1100, lon: 11.4500, arrowType: 'start',       label: 'Trailhead' },
-  { lat: 48.1135, lon: 11.4560, arrowType: 'right',       label: 'Forest Fork' },
-  { lat: 48.1180, lon: 11.4585, arrowType: 'slight-left', label: 'Creek Bend' },
-  { lat: 48.1205, lon: 11.4540, arrowType: 'left',        label: 'Ridge Junction' },
-  { lat: 48.1240, lon: 11.4500, arrowType: 'straight',    label: 'Meadow' },
-  { lat: 48.1235, lon: 11.4445, arrowType: 'sharp-right', label: 'Rocky Descent' },
-  { lat: 48.1190, lon: 11.4420, arrowType: 'finish',      label: 'Summit Hut' },
-];
-
-function demoWaypoints(): Waypoint[] {
-  return DEMO_POINTS.map((p) => ({ ...p, id: crypto.randomUUID() }));
-}
-
-function createTrack(tracks: Track[]): Track {
-  return {
-    id: crypto.randomUUID(),
-    name: `Track ${tracks.length + 1}`,
-    color: nextColor(tracks),
-    waypoints: [],
-  };
-}
-
-function makeMarkerIcon(index: number, color: string, isActive: boolean, isDraggable: boolean) {
-  const size = isActive ? 28 : 20;
-  return L.divIcon({
-    className: '',
-    html: `<div style="
-      width:${size}px;height:${size}px;
-      background:${color};color:#fff;
-      border-radius:50%;
-      display:flex;align-items:center;justify-content:center;
-      font-weight:700;font-size:${isActive ? 12 : 10}px;
-      border:2px solid rgba(255,255,255,0.85);
-      box-shadow:0 1px 5px rgba(0,0,0,0.6);
-      opacity:${isActive ? 1 : 0.55};
-      cursor:${isDraggable ? 'grab' : 'pointer'};
-    ">${index + 1}</div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  });
-}
-
-function isWaypoint(w: unknown): w is Waypoint {
-  return (
-    typeof w === 'object' && w !== null &&
-    typeof (w as Record<string, unknown>).id === 'string' &&
-    typeof (w as Record<string, unknown>).lat === 'number' &&
-    typeof (w as Record<string, unknown>).lon === 'number' &&
-    typeof (w as Record<string, unknown>).label === 'string' &&
-    ARROW_TYPES.includes((w as Record<string, unknown>).arrowType as Waypoint['arrowType'])
-  );
-}
-
-function isWaypointArray(data: unknown): data is Waypoint[] {
-  return Array.isArray(data) && data.every(isWaypoint);
-}
-
-function isTrackArray(data: unknown): data is Track[] {
-  return (
-    Array.isArray(data) &&
-    data.every(
-      (t) =>
-        typeof t === 'object' && t !== null &&
-        typeof (t as Record<string, unknown>).id === 'string' &&
-        typeof (t as Record<string, unknown>).name === 'string' &&
-        typeof (t as Record<string, unknown>).color === 'string' &&
-        isWaypointArray((t as Record<string, unknown>).waypoints),
-    )
-  );
-}
-
-// ── Sub-components ───────────────────────────────────────────────────────────
-
-interface ClickHandlerProps {
-  gpxPath: [number, number][] | null;
-  onMapClick: (lat: number, lon: number) => void;
-}
-// Snap a click onto the GPX overlay when it lands within SNAP_PX of the line
-const SNAP_PX = 18;
-function ClickHandler({ gpxPath, onMapClick }: ClickHandlerProps) {
-  const map = useMap();
-  useMapEvents({
-    click: (e) => {
-      let { lat, lng } = e.latlng;
-      if (gpxPath && gpxPath.length > 0) {
-        const clickPt = map.latLngToContainerPoint(e.latlng);
-        const pts = gpxPath.map(([la, lo]) => map.latLngToContainerPoint([la, lo]));
-        let bestPt: L.Point | null = null;
-        let bestDist = Infinity;
-        if (pts.length === 1) {
-          bestPt = pts[0];
-          bestDist = clickPt.distanceTo(pts[0]);
-        } else {
-          for (let i = 0; i < pts.length - 1; i++) {
-            const c = L.LineUtil.closestPointOnSegment(clickPt, pts[i], pts[i + 1]);
-            const dd = clickPt.distanceTo(c);
-            if (dd < bestDist) { bestDist = dd; bestPt = c; }
-          }
-        }
-        if (bestPt && bestDist <= SNAP_PX) {
-          const ll = map.containerPointToLatLng(bestPt);
-          lat = ll.lat;
-          lng = ll.lng;
-        }
-      }
-      onMapClick(lat, lng);
-    },
-  });
-  return null;
-}
-
-// Imperatively fits the map to a set of positions once, then clears the trigger
-function FitBounds({ positions, onDone }: { positions: [number, number][]; onDone: () => void }) {
-  const map = useMap();
-  useEffect(() => {
-    if (positions.length === 1) map.setView(positions[0], 14);
-    else if (positions.length > 1) map.fitBounds(L.latLngBounds(positions), { padding: [60, 60] });
-    onDone();
-  }, [map, positions, onDone]);
-  return null;
-}
-
-// Location search using Nominatim
-function MapSearch() {
-  const map = useMap();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [searching, setSearching] = useState(false);
-  const [notFound, setNotFound] = useState(false);
-
-  useEffect(() => {
-    if (containerRef.current) {
-      L.DomEvent.disableClickPropagation(containerRef.current);
-      L.DomEvent.disableScrollPropagation(containerRef.current);
-    }
-  }, []);
-
-  const search = async () => {
-    if (!query.trim()) return;
-    setSearching(true);
-    setNotFound(false);
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
-        { headers: { 'Accept-Language': 'en', 'User-Agent': 'RoadbookNav/1.0' } },
-      );
-      const data: Array<{ lat: string; lon: string }> = await res.json();
-      if (data[0]) {
-        map.setView([parseFloat(data[0].lat), parseFloat(data[0].lon)], 13);
-        setOpen(false);
-        setQuery('');
-      } else {
-        setNotFound(true);
-      }
-    } catch {
-      setNotFound(true);
-    }
-    setSearching(false);
-  };
-
-  if (!open) {
-    return (
-      <div ref={containerRef} className="absolute top-2 right-2 z-[1000]">
-        <button
-          onClick={() => setOpen(true)}
-          className="px-3 py-2 bg-[#1a1a1a]/95 border border-white/20 rounded-lg text-gray-300 text-sm hover:bg-[#2a2a2a] transition-colors backdrop-blur-sm"
-          title="Search location"
-        >
-          🔍
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div ref={containerRef} className="absolute top-2 right-2 z-[1000] flex items-center gap-1">
-      <input
-        autoFocus
-        value={query}
-        onChange={(e) => { setQuery(e.target.value); setNotFound(false); }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') search();
-          if (e.key === 'Escape') { setOpen(false); setQuery(''); }
-        }}
-        placeholder="Search location…"
-        className={`w-44 bg-[#1a1a1a] border rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none transition-colors ${
-          notFound ? 'border-red-500/60' : 'border-white/25 focus:border-white/50'
-        }`}
-      />
-      <button
-        onClick={search}
-        disabled={searching}
-        className="px-3 py-2 bg-[#2a2a2a] border border-white/25 rounded-lg text-white text-sm hover:bg-[#3a3a3a] disabled:opacity-50 transition-colors"
-      >
-        {searching ? '…' : '↵'}
-      </button>
-      <button
-        onClick={() => { setOpen(false); setQuery(''); setNotFound(false); }}
-        className="px-3 py-2 bg-[#2a2a2a] border border-white/25 rounded-lg text-gray-400 text-sm hover:bg-[#3a3a3a] transition-colors"
-      >
-        ✕
-      </button>
-    </div>
-  );
-}
-
-// GPX overlay — fits map to the imported track on mount
-function GpxOverlay({ path }: { path: [number, number][] }) {
-  const map = useMap();
-  useEffect(() => {
-    if (path.length > 1) map.fitBounds(L.latLngBounds(path), { padding: [40, 40] });
-  }, [map, path]);
-  return (
-    <>
-      {/* White halo so the line reads against any map background */}
-      <Polyline positions={path} color="white" weight={8} opacity={0.55} lineCap="round" lineJoin="round" />
-      {/* Orange dashed line on top */}
-      <Polyline positions={path} color="#f97316" weight={4} opacity={0.95} dashArray="10 6" lineCap="round" lineJoin="round" />
-    </>
-  );
-}
-
-// Arrow-type grid shared by both modals
-function ArrowGrid({
-  value,
-  onChange,
-}: {
-  value: Waypoint['arrowType'];
-  onChange: (t: Waypoint['arrowType']) => void;
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      {ARROW_TYPES.map((type) => {
-        const active = value === type;
-        return (
-          <button
-            key={type}
-            onClick={() => onChange(type)}
-            className={`cursor-pointer flex items-center gap-2 px-3 py-3 rounded-xl text-sm font-medium ${
-              active ? 'bg-white text-black' : BTN_ARROW_OFF
-            }`}
-          >
-            <ArrowIcon type={type} active={active} size={18} />
-            {ARROW_LABELS[type]}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-interface AddModalProps {
-  lat: number;
-  lon: number;
-  isFirst: boolean;
-  onConfirm: (label: string, arrowType: Waypoint['arrowType']) => void;
-  onCancel: () => void;
-}
-function WaypointAddModal({ lat, lon, isFirst, onConfirm, onCancel }: AddModalProps) {
-  const [label, setLabel] = useState('');
-  const [arrowType, setArrowType] = useState<Waypoint['arrowType']>(isFirst ? 'start' : 'straight');
-
-  return (
-    <div className="fixed inset-0 z-[1000] flex items-end md:items-center justify-center bg-black/80 p-4">
-      <div className="bg-[#1a1a1a] border border-white/25 rounded-2xl w-full max-w-sm p-6 flex flex-col gap-5">
-        <h2 className="font-bold text-lg text-white">Add Waypoint</h2>
-        <div className="text-xs text-gray-400 font-mono">
-          {lat.toFixed(5)}, {lon.toFixed(5)}
-        </div>
-
-        <input
-          autoFocus
-          type="text"
-          placeholder="Label (optional)"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && onConfirm(label.trim(), arrowType)}
-          className="w-full bg-[#111] border border-white/30 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white/60 transition-colors"
-        />
-
-        <ArrowGrid value={arrowType} onChange={setArrowType} />
-
-        <div className="flex gap-3">
-          <button onClick={onCancel} className={`flex-1 py-3 px-4 ${BTN_CANCEL}`}>
-            Cancel
-          </button>
-          <button
-            onClick={() => onConfirm(label.trim(), arrowType)}
-            className={`flex-1 py-3 px-4 ${BTN_PRIMARY}`}
-          >
-            Add
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface EditModalProps {
-  waypoint: Waypoint;
-  index: number;
-  onSave: (label: string, arrowType: Waypoint['arrowType']) => void;
-  onDelete: () => void;
-  onCancel: () => void;
-}
-function WaypointEditModal({ waypoint, index, onSave, onDelete, onCancel }: EditModalProps) {
-  const [label, setLabel] = useState(waypoint.label);
-  const [arrowType, setArrowType] = useState<Waypoint['arrowType']>(waypoint.arrowType);
-
-  return (
-    <div className="fixed inset-0 z-[1000] flex items-end md:items-center justify-center bg-black/80 p-4">
-      <div className="bg-[#1a1a1a] border border-white/25 rounded-2xl w-full max-w-sm p-6 flex flex-col gap-5">
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="font-bold text-lg text-white">Waypoint #{index + 1}</h2>
-          <span className="text-xs text-gray-400 font-mono mt-1 text-right">
-            {waypoint.lat.toFixed(5)}<br />{waypoint.lon.toFixed(5)}
-          </span>
-        </div>
-
-        <input
-          autoFocus
-          type="text"
-          placeholder="Label (optional)"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && onSave(label.trim(), arrowType)}
-          className="w-full bg-[#111] border border-white/30 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white/60 transition-colors"
-        />
-
-        <ArrowGrid value={arrowType} onChange={setArrowType} />
-
-        <div className="flex gap-2">
-          <button onClick={onCancel} className={`py-3 px-4 ${BTN_CANCEL}`}>
-            Cancel
-          </button>
-          <button onClick={onDelete} className={`py-3 px-4 ${BTN_DELETE}`}>
-            Delete
-          </button>
-          <button
-            onClick={() => onSave(label.trim(), arrowType)}
-            className={`flex-1 py-3 px-4 ${BTN_PRIMARY}`}
-          >
-            Save
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Custom confirmation dialog — replaces browser confirm()
-interface ConfirmAction {
-  message: string;
-  onConfirm: () => void;
-}
-function ConfirmDialog({ action, onCancel }: { action: ConfirmAction; onCancel: () => void }) {
-  return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 p-4">
-      <div className="bg-[#1a1a1a] border border-white/25 rounded-2xl p-6 max-w-xs w-full flex flex-col gap-5">
-        <p className="text-white text-sm leading-relaxed">{action.message}</p>
-        <div className="flex gap-3">
-          <button onClick={onCancel} className={`flex-1 py-3 px-4 ${BTN_CANCEL}`}>Cancel</button>
-          <button onClick={action.onConfirm} className={`flex-1 py-3 px-4 ${BTN_DELETE}`}>Delete</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Waypoint strip (sortable) ────────────────────────────────────────────────
-
-function SortableWaypointChip({
-  wp,
-  index,
-  color,
-  onDelete,
-  onEdit,
-}: {
-  wp: Waypoint;
-  index: number;
-  color: string;
-  onDelete: () => void;
-  onEdit: () => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: wp.id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    zIndex: isDragging ? 10 : undefined,
-  };
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      onClick={onEdit}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onEdit();
-        }
-      }}
-      className="flex-shrink-0 flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs bg-[#1e1e1e] border border-white/20 cursor-grab active:cursor-grabbing touch-none select-none focus:outline-none focus:ring-1 focus:ring-white/40"
-    >
-      <span className="text-gray-500 -ml-0.5 mr-0.5">
-        <GripIcon />
-      </span>
-      <span
-        className="w-4 h-4 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0"
-        style={{ background: color, fontSize: 9 }}
-      >
-        {index + 1}
-      </span>
-      {wp.label && <span className="text-white max-w-20 truncate">{wp.label}</span>}
-      <ArrowIcon type={wp.arrowType} active={false} size={14} />
-      <button
-        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        onPointerDown={(e) => e.stopPropagation()}
-        className={`ml-0.5 ${BTN_ICON_DEL}`}
-        aria-label="Delete"
-      >
-        ✕
-      </button>
-    </div>
-  );
-}
-
-function WaypointStrip({
-  track,
-  onReorder,
-  onDelete,
-  onEdit,
-}: {
-  track: Track;
-  onReorder: (fromIndex: number, toIndex: number) => void;
-  onDelete: (wp: Waypoint) => void;
-  onEdit: (wp: Waypoint, index: number) => void;
-}) {
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const from = track.waypoints.findIndex((wp) => wp.id === active.id);
-    const to = track.waypoints.findIndex((wp) => wp.id === over.id);
-    if (from === -1 || to === -1) return;
-    onReorder(from, to);
-  };
-
-  return (
-    <div className="flex-shrink-0 max-h-32 overflow-y-auto bg-[#111] border-t border-white/20 px-3 py-2">
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={track.waypoints.map((wp) => wp.id)} strategy={horizontalListSortingStrategy}>
-          <div className="flex gap-2">
-            {track.waypoints.map((wp, i) => (
-              <SortableWaypointChip
-                key={wp.id}
-                wp={wp}
-                index={i}
-                color={track.color}
-                onDelete={() => onDelete(wp)}
-                onEdit={() => onEdit(wp, i)}
-              />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
-    </div>
-  );
+function saveGpxOverlay(path: [number, number][] | null) {
+  try {
+    if (path) localStorage.setItem(GPX_KEY, JSON.stringify(path));
+    else localStorage.removeItem(GPX_KEY);
+  } catch { /* storage full — overlay just won't survive a reload */ }
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
@@ -625,7 +56,7 @@ interface Props {
   tracks: Track[];
   activeTrackId: string | null;
   onChange: (tracks: Track[], activeTrackId: string | null) => void;
-  onStartNavigation: (trackId: string) => void;
+  onStartNavigation: (trackId: string, mode: NavMode) => void;
 }
 
 interface Pending { lat: number; lon: number }
@@ -639,17 +70,34 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [hintDismissed, setHintDismissed] = useState(false);   // the empty-track welcome box
   const [historyLen, setHistoryLen] = useState(0);
 
   const [gpxPath, setGpxPath] = useState<[number, number][] | null>(null);
+  const [gpxFresh, setGpxFresh] = useState(false);   // fit the map only for newly loaded files
   const [fitTarget, setFitTarget] = useState<[number, number][] | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const gpxInputRef  = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const isDraggingRef = useRef(false);
   const historyRef = useRef<Array<{ tracks: Track[]; activeTrackId: string | null }>>([]);
+
+  const notify = useCallback((text: string, tone: ToastMessage['tone'] = 'info') => setToast({ text, tone }), []);
+  const dismissToast = useCallback(() => setToast(null), []);
+
+  // ── GPX overlay ───────────────────────────────────────────────────────────
+
+  useEffect(() => { setGpxPath(loadGpxOverlay()); }, []);
+
+  const updateGpxPath = (path: [number, number][] | null) => {
+    const slim = path ? decimate(path, GPX_MAX_POINTS) : null;
+    setGpxFresh(!!slim);
+    setGpxPath(slim);
+    saveGpxOverlay(slim);
+  };
 
   // ── History / undo ────────────────────────────────────────────────────────
 
@@ -660,25 +108,26 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
     onChange(newTracks, newActiveId);
   };
 
-  // Ctrl+Z / Cmd+Z
+  const handleUndo = useCallback(() => {
+    const prev = historyRef.current.pop();
+    setHistoryLen(historyRef.current.length);
+    if (prev) onChange(prev.tracks, prev.activeTrackId);
+  }, [onChange]);
+
+  // Ctrl+Z / Cmd+Z — not while typing in a field
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+      if (e.key === 'Escape') setHintDismissed(true);
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
-        const prev = historyRef.current.pop();
-        setHistoryLen(historyRef.current.length);
-        if (prev) onChange(prev.tracks, prev.activeTrackId);
+        handleUndo();
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onChange]);
-
-  const handleUndo = () => {
-    const prev = historyRef.current.pop();
-    setHistoryLen(historyRef.current.length);
-    if (prev) onChange(prev.tracks, prev.activeTrackId);
-  };
+  }, [handleUndo]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -701,6 +150,19 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
 
   const activeTrack = tracks.find((t) => t.id === activeTrackId) ?? null;
 
+  // Frame the active track when the editor opens, and any track that appears later —
+  // including ones added outside the editor (share links, example links)
+  const knownTrackIdsRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const known = knownTrackIdsRef.current;
+    knownTrackIdsRef.current = new Set(tracks.map((t) => t.id));
+    const toFrame = known
+      ? tracks.filter((t) => !known.has(t.id))
+      : tracks.filter((t) => t.id === activeTrackId);
+    const positions = toFrame.flatMap((t) => t.waypoints.map((w): [number, number] => [w.lat, w.lon]));
+    if (positions.length > 0) setFitTarget(positions);
+  }, [tracks]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Pre-build marker icons keyed by waypoint id — only rebuilt when tracks or the
   // active selection change, not on every unrelated re-render (modals, menus, search)
   const markerIcons = useMemo(() => {
@@ -708,7 +170,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
     for (const track of tracks) {
       const isActive = track.id === activeTrackId;
       track.waypoints.forEach((wp, i) => {
-        m.set(wp.id, makeMarkerIcon(i, track.color, isActive, isActive));
+        m.set(wp.id, makeMarkerIcon(i, track.color, isActive, isActive, wp.danger));
       });
     }
     return m;
@@ -724,7 +186,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
   // Fill the current empty track with a demo route, or add a new one if the
   // active track already has waypoints — then frame it on the map
   const handleLoadDemo = () => {
-    const wps = demoWaypoints();
+    const wps = demoTrack().waypoints;
     const positions = wps.map((w): [number, number] => [w.lat, w.lon]);
     if (activeTrack && activeTrack.waypoints.length === 0) {
       commit(
@@ -736,11 +198,12 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
       commit([...tracks, demo], demo.id);
     }
     setFitTarget(positions);
+    trackEvent('demo-loaded');
   };
 
   const handleDeleteTrack = (id: string) => {
     const track = tracks.find((t) => t.id === id);
-    const hasWaypoints = (track?.waypoints.length ?? 0) > 0;
+    const count = track?.waypoints.length ?? 0;
 
     const doDelete = () => {
       const remaining = tracks.filter((t) => t.id !== id);
@@ -749,9 +212,9 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
       setConfirmAction(null);
     };
 
-    if (hasWaypoints) {
+    if (count > 0) {
       setConfirmAction({
-        message: `Delete "${track?.name}" and its ${track!.waypoints.length} waypoint(s)? This cannot be undone.`,
+        message: `Delete "${track?.name}" and its ${count} waypoint(s)? You can undo this.`,
         onConfirm: doDelete,
       });
     } else {
@@ -779,73 +242,47 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
 
   // ── Waypoint CRUD ────────────────────────────────────────────────────────
 
+  const updateWaypoints = (trackId: string, fn: (wps: Waypoint[]) => Waypoint[]) =>
+    commit(tracks.map((t) => (t.id === trackId ? { ...t, waypoints: fn(t.waypoints) } : t)), activeTrackId);
+
   const handleMapClick = (lat: number, lon: number) => {
     if (!activeTrack) return;
     setPending({ lat, lon });
   };
 
-  const handleConfirm = (label: string, arrowType: Waypoint['arrowType']) => {
+  const handleConfirm = (fields: WaypointFields) => {
     if (!pending || !activeTrack) return;
-    const wp: Waypoint = { id: crypto.randomUUID(), lat: pending.lat, lon: pending.lon, arrowType, label };
-    const updated = tracks.map((t) =>
-      t.id === activeTrackId ? { ...t, waypoints: [...t.waypoints, wp] } : t,
-    );
-    commit(updated, activeTrackId);
+    const wp: Waypoint = { id: crypto.randomUUID(), lat: pending.lat, lon: pending.lon, ...stripEmpty(fields) };
+    updateWaypoints(activeTrack.id, (wps) => [...wps, wp]);
     setPending(null);
   };
 
-  const handleMoveWaypoint = (trackId: string, wpId: string, lat: number, lon: number) => {
-    commit(
-      tracks.map((t) =>
-        t.id === trackId
-          ? { ...t, waypoints: t.waypoints.map((w) => w.id === wpId ? { ...w, lat, lon } : w) }
-          : t,
-      ),
-      activeTrackId,
-    );
-  };
+  const handleMoveWaypoint = (trackId: string, wpId: string, lat: number, lon: number) =>
+    updateWaypoints(trackId, (wps) => wps.map((w) => (w.id === wpId ? { ...w, lat, lon } : w)));
 
-  const handleReorderWaypoint = (trackId: string, fromIndex: number, toIndex: number) => {
-    commit(
-      tracks.map((t) => {
-        if (t.id !== trackId) return t;
-        const wps = [...t.waypoints];
-        const [removed] = wps.splice(fromIndex, 1);
-        wps.splice(toIndex, 0, removed);
-        return { ...t, waypoints: wps };
-      }),
-      activeTrackId,
-    );
-  };
+  const handleReorderWaypoint = (trackId: string, fromIndex: number, toIndex: number) =>
+    updateWaypoints(trackId, (wps) => {
+      const next = [...wps];
+      const [removed] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, removed);
+      return next;
+    });
 
-  const handleSaveEditingWaypoint = (label: string, arrowType: Waypoint['arrowType']) => {
+  const handleSaveEditingWaypoint = (fields: WaypointFields) => {
     if (!editingWaypoint) return;
-    commit(
-      tracks.map((t) =>
-        t.id === editingWaypoint.trackId
-          ? {
-              ...t,
-              waypoints: t.waypoints.map((w) =>
-                w.id === editingWaypoint.waypoint.id ? { ...w, label, arrowType } : w,
-              ),
-            }
-          : t,
-      ),
-      activeTrackId,
+    updateWaypoints(editingWaypoint.trackId, (wps) =>
+      wps.map((w) => {
+        if (w.id !== editingWaypoint.waypoint.id) return w;
+        const { danger: _d, exit: _e, ...rest } = w;   // eslint-disable-line @typescript-eslint/no-unused-vars
+        return { ...rest, ...stripEmpty(fields) };
+      }),
     );
     setEditingWaypoint(null);
   };
 
   const handleDeleteEditingWaypoint = () => {
     if (!editingWaypoint) return;
-    commit(
-      tracks.map((t) =>
-        t.id === editingWaypoint.trackId
-          ? { ...t, waypoints: t.waypoints.filter((w) => w.id !== editingWaypoint.waypoint.id) }
-          : t,
-      ),
-      activeTrackId,
-    );
+    updateWaypoints(editingWaypoint.trackId, (wps) => wps.filter((w) => w.id !== editingWaypoint.waypoint.id));
     setEditingWaypoint(null);
   };
 
@@ -853,12 +290,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
     setConfirmAction({
       message: `Delete waypoint "${label || 'unnamed'}"?`,
       onConfirm: () => {
-        commit(
-          tracks.map((t) =>
-            t.id === trackId ? { ...t, waypoints: t.waypoints.filter((w) => w.id !== wpId) } : t,
-          ),
-          activeTrackId,
-        );
+        updateWaypoints(trackId, (wps) => wps.filter((w) => w.id !== wpId));
         setConfirmAction(null);
       },
     });
@@ -868,72 +300,73 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
 
   const handleExport = () => {
     if (!activeTrack) return;
-    const blob = new Blob([JSON.stringify(activeTrack.waypoints, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${activeTrack.name.replace(/\s+/g, '-')}-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadFile(`${safeFilename(activeTrack.name)}.json`, serializeTracks([activeTrack]), 'application/json');
+    trackEvent('export-json', { tracks: 1 });
   };
 
   const handleExportAll = () => {
-    const blob = new Blob([JSON.stringify(tracks, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `roadbook-all-tracks-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const nonEmpty = tracks.filter((t) => t.waypoints.length > 0);
+    downloadFile(`roadbook-all-tracks-${new Date().toISOString().slice(0, 10)}.json`, serializeTracks(nonEmpty), 'application/json');
+    trackEvent('export-json', { tracks: nonEmpty.length });
+  };
+
+  const handleExportGpx = () => {
+    if (!activeTrack) return;
+    downloadFile(`${safeFilename(activeTrack.name)}.gpx`, trackToGpx(activeTrack), 'application/gpx+xml');
+    trackEvent('export-gpx');
+  };
+
+  const addImportedTracks = (imported: Track[]) => {
+    if (imported.length === 0) return;
+    // Replace the untouched empty starter track instead of keeping it around
+    const base = tracks.length === 1 && tracks[0].waypoints.length === 0 ? [] : tracks;
+    commit([...base, ...imported], imported[0].id);   // new tracks are framed by the effect above
+  };
+
+  const importJson = (text: string, fileName: string) => {
+    const parsed = parseRoadbookJson(text, fileName.replace(/\.json$/i, ''));
+    const imported = materialize(parsed, tracks);
+    addImportedTracks(imported);
+    const wpCount = imported.reduce((n, t) => n + t.waypoints.length, 0);
+    notify(`Imported ${imported.length} track${imported.length === 1 ? '' : 's'} with ${wpCount} waypoints.`);
+    trackEvent('import-json', { tracks: imported.length });
+  };
+
+  const importGpx = (text: string, fileName: string) => {
+    const { path, waypoints, name } = parseGpx(text);
+    if (path.length === 0 && waypoints.length === 0) {
+      throw new ImportError('No track points or roadbook waypoints found in this GPX file.');
+    }
+    const parts: string[] = [];
+    if (waypoints.length > 0) {
+      addImportedTracks(materialize([{ name: name ?? fileName.replace(/\.(gpx|xml)$/i, ''), waypoints }], tracks));
+      parts.push(`${waypoints.length} roadbook waypoints`);
+    }
+    if (path.length > 0) {
+      updateGpxPath(path);
+      parts.push('the track as an orange overlay — click near it to place waypoints on it');
+    }
+    notify(`Loaded ${parts.join(' and ')}.`);
+    trackEvent('import-gpx', { waypoints: waypoints.length, overlay: path.length > 0 });
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = () => {
+      const text = String(reader.result ?? '');
+      const isGpx = /\.(gpx|xml)$/i.test(file.name) || text.trimStart().startsWith('<');
       try {
-        const parsed = JSON.parse(ev.target?.result as string);
-        if (isTrackArray(parsed)) {
-          const imported = parsed.map((t) => ({ ...t, id: crypto.randomUUID() }));
-          const merged = [...tracks, ...imported];
-          commit(merged, imported[0]?.id ?? activeTrackId);
-        } else if (isWaypointArray(parsed)) {
-          const newTrack: Track = {
-            id: crypto.randomUUID(),
-            name: file.name.replace(/\.json$/i, ''),
-            color: nextColor(tracks),
-            waypoints: parsed,
-          };
-          commit([...tracks, newTrack], newTrack.id);
-        } else {
-          alert('Invalid file. Expected a waypoint or track JSON.');
-        }
-      } catch {
-        alert('Could not read file.');
+        if (isGpx) importGpx(text, file.name);
+        else importJson(text, file.name);
+      } catch (err) {
+        notify(err instanceof ImportError ? err.message : 'Could not read this file.', 'error');
       }
     };
+    reader.onerror = () => notify('Could not read this file.', 'error');
     reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  // ── GPX import ──────────────────────────────────────────────────────────
-
-  const handleGpxImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const path = parseGpx(ev.target!.result as string);
-      if (path.length === 0) {
-        alert('No track points found in this GPX file.');
-      } else {
-        setGpxPath(path);
-      }
-    };
-    reader.onerror = () => alert('Could not read GPX file.');
-    reader.readAsText(file);
-    e.target.value = '';
   };
 
   // ── Map center ───────────────────────────────────────────────────────────
@@ -941,146 +374,131 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
   const firstWp = tracks.flatMap((t) => t.waypoints)[0];
   const center: [number, number] = firstWp
     ? [firstWp.lat, firstWp.lon]
-    : [48.137154, 11.576124];
+    : gpxPath?.[0] ?? [48.137154, 11.576124];
 
   // ── Derived state ────────────────────────────────────────────────────────
 
   const hasFinish = activeTrack?.waypoints.some((w) => w.arrowType === 'finish') ?? false;
   const activeWpCount = activeTrack?.waypoints.length ?? 0;
+  const canUseTrack = !!activeTrack && activeWpCount > 0;
+
+  const openMenu = () => {
+    if (!menuOpen && menuBtnRef.current) {
+      const r = menuBtnRef.current.getBoundingClientRect();
+      setMenuPos({ top: r.bottom + 4, left: r.left });
+    }
+    setMenuOpen((o) => !o);
+  };
+
+  const menuAction = (fn: () => void) => () => { fn(); setMenuOpen(false); };
 
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="w-screen h-screen bg-black flex flex-col">
+    <div className="w-screen h-[100dvh] bg-black flex flex-col">
 
       {/* ── Toolbar ── */}
-      <div className="relative z-[100] flex items-center gap-2 px-4 py-3 bg-[#1a1a1a] border-b border-white/20 flex-shrink-0">
-        <span className="font-bold text-sm whitespace-nowrap mr-1 text-white">Roadbook Nav</span>
+      <div className="relative z-[100] flex items-center gap-2 px-3 sm:px-4 py-3 bg-[#1a1a1a] border-b border-white/20 flex-shrink-0">
+        <span className="font-bold text-sm whitespace-nowrap mr-1 text-white hidden sm:inline">Roadbook Nav</span>
 
-        {/* Undo button */}
         <button
           onClick={handleUndo}
           disabled={historyLen === 0}
           className={`px-3 py-2 text-xs whitespace-nowrap flex items-center gap-1.5 ${BTN_GHOST}`}
           title="Undo (Ctrl+Z)"
+          aria-label="Undo"
         >
           <UndoIcon />
-          Undo
+          <span className="hidden sm:inline">Undo</span>
         </button>
 
-        {/* Desktop: show all buttons inline */}
-        <div className="hidden md:flex items-center gap-2">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className={`px-3 py-2 text-xs whitespace-nowrap ${BTN_GHOST}`}
-          >
-            ↑ Import
-          </button>
-          <button
-            onClick={handleExport}
-            disabled={!activeTrack || activeWpCount === 0}
-            className={`px-3 py-2 text-xs whitespace-nowrap ${BTN_GHOST}`}
-          >
-            ↓ Export
-          </button>
-          <button
-            onClick={handleExportAll}
-            disabled={tracks.every((t) => t.waypoints.length === 0)}
-            className={`px-3 py-2 text-xs whitespace-nowrap ${BTN_GHOST}`}
-          >
-            ↓ Export All
-          </button>
-          <button
-            onClick={() => gpxInputRef.current?.click()}
-            className={`px-3 py-2 text-xs whitespace-nowrap ${BTN_GHOST}`}
-          >
-            ↑ GPX
-          </button>
-          {gpxPath && (
-            <button
-              onClick={() => setGpxPath(null)}
-              className="cursor-pointer px-3 py-2 text-xs whitespace-nowrap bg-[#2a2a2a] border border-orange-400/40 rounded-lg text-orange-400 transition-colors hover:bg-orange-400/10 active:bg-orange-400/15"
-            >
-              ✕ GPX
-            </button>
-          )}
-        </div>
-
-        {/* Mobile: dropdown menu for import/export */}
-        <div className="md:hidden" ref={menuRef}>
+        {/* File menu */}
+        <div ref={menuRef}>
           <button
             ref={menuBtnRef}
-            onClick={() => {
-              if (!menuOpen && menuBtnRef.current) {
-                const r = menuBtnRef.current.getBoundingClientRect();
-                setMenuPos({ top: r.bottom + 4, left: r.left });
-              }
-              setMenuOpen((o) => !o);
-            }}
+            onClick={openMenu}
             aria-label="Open file menu"
-            className={`px-3 py-2 text-xs ${BTN_GHOST}`}
+            aria-expanded={menuOpen}
+            className={`px-3 py-2 text-xs whitespace-nowrap ${BTN_GHOST}`}
           >
             Files ⋯
           </button>
           {menuOpen && (
             <div
-              className="fixed z-[9999] flex flex-col gap-1 bg-[#1a1a1a] border border-white/20 rounded-lg p-2 min-w-[140px] shadow-xl"
+              className="fixed z-[9999] flex flex-col gap-1 bg-[#1a1a1a] border border-white/20 rounded-lg p-2 min-w-[190px] shadow-xl"
               style={{ top: menuPos.top, left: menuPos.left }}
             >
-              <button
-                onClick={() => { fileInputRef.current?.click(); setMenuOpen(false); }}
-                className={`px-3 py-2 text-xs text-left whitespace-nowrap ${BTN_GHOST}`}
-              >
-                ↑ Import
-              </button>
-              <button
-                onClick={() => { handleExport(); setMenuOpen(false); }}
-                disabled={!activeTrack || activeWpCount === 0}
-                className={`px-3 py-2 text-xs text-left whitespace-nowrap ${BTN_GHOST}`}
-              >
-                ↓ Export
-              </button>
-              <button
-                onClick={() => { handleExportAll(); setMenuOpen(false); }}
-                disabled={tracks.every((t) => t.waypoints.length === 0)}
-                className={`px-3 py-2 text-xs text-left whitespace-nowrap ${BTN_GHOST}`}
-              >
-                ↓ Export All
+              <button onClick={menuAction(() => fileInputRef.current?.click())} className={BTN_MENU_ITEM}>
+                ↑ Import JSON or GPX
               </button>
               <div className="border-t border-white/10 my-1" />
+              <button onClick={menuAction(handleExport)} disabled={!canUseTrack} className={BTN_MENU_ITEM}>
+                ↓ Export roadbook (JSON)
+              </button>
+              <button onClick={menuAction(handleExportGpx)} disabled={!canUseTrack} className={BTN_MENU_ITEM}>
+                ↓ Export as GPX
+              </button>
               <button
-                onClick={() => { gpxInputRef.current?.click(); setMenuOpen(false); }}
-                className={`px-3 py-2 text-xs text-left whitespace-nowrap ${BTN_GHOST}`}
+                onClick={menuAction(handleExportAll)}
+                disabled={tracks.every((t) => t.waypoints.length === 0)}
+                className={BTN_MENU_ITEM}
               >
-                ↑ GPX overlay
+                ↓ Export all tracks
               </button>
               {gpxPath && (
-                <button
-                  onClick={() => { setGpxPath(null); setMenuOpen(false); }}
-                  className="cursor-pointer px-3 py-2 text-xs text-left whitespace-nowrap bg-[#2a2a2a] border border-orange-400/40 rounded-lg text-orange-400 transition-colors hover:bg-orange-400/10"
-                >
-                  ✕ GPX overlay
-                </button>
+                <>
+                  <div className="border-t border-white/10 my-1" />
+                  <button
+                    onClick={menuAction(() => updateGpxPath(null))}
+                    className="cursor-pointer px-3 py-2 text-xs text-left whitespace-nowrap bg-[#2a2a2a] border border-orange-400/40 rounded-lg text-orange-400 transition-colors hover:bg-orange-400/10"
+                  >
+                    ✕ Remove GPX overlay
+                  </button>
+                </>
               )}
             </div>
           )}
         </div>
 
-        <input ref={fileInputRef} type="file" accept=".json"       className="hidden" onChange={handleImport} />
-        <input ref={gpxInputRef}  type="file" accept=".gpx,.xml"  className="hidden" onChange={handleGpxImport} />
+        <button
+          onClick={() => { setSharing(true); trackEvent('share-opened'); }}
+          disabled={!canUseTrack}
+          className={`px-3 py-2 text-xs whitespace-nowrap flex items-center gap-1.5 ${BTN_GHOST}`}
+          title="Send this route to your phone with a QR code or link"
+        >
+          <ShareIcon />
+          <span className="hidden sm:inline">Send to phone</span>
+          <span className="sm:hidden">Share</span>
+        </button>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,.gpx,.xml,application/json,application/gpx+xml"
+          className="hidden"
+          onChange={handleImport}
+        />
 
         <div className="ml-auto flex items-center gap-2 flex-shrink-0">
           {activeWpCount > 0 && !hasFinish && (
             <span
-              className="text-amber-400/80 text-xs hidden sm:block"
+              className="text-amber-400/80 text-xs hidden lg:block"
               title="No finish waypoint — add a waypoint with type 'Finish' to mark the end of your route"
             >
               No finish ⚠
             </span>
           )}
           <button
-            onClick={() => activeTrackId && activeWpCount > 0 && onStartNavigation(activeTrackId)}
-            disabled={!activeTrack || activeWpCount === 0}
+            onClick={() => activeTrackId && canUseTrack && onStartNavigation(activeTrackId, 'preview')}
+            disabled={!canUseTrack}
+            className={`px-3 py-2 text-sm whitespace-nowrap ${BTN_GHOST}`}
+            title="Step through the roadbook without GPS"
+          >
+            Preview
+          </button>
+          <button
+            onClick={() => activeTrackId && canUseTrack && onStartNavigation(activeTrackId, 'gps')}
+            disabled={!canUseTrack}
             className={`px-4 py-2 text-sm whitespace-nowrap ${BTN_PRIMARY}`}
           >
             Navigate →
@@ -1126,7 +544,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
                   </span>
                   <button
                     onClick={(e) => { e.stopPropagation(); startRename(track.id, track.name); }}
-                    className="opacity-0 group-hover/name:opacity-100 transition-opacity text-gray-600 hover:text-gray-300"
+                    className="opacity-60 sm:opacity-0 sm:group-hover/name:opacity-100 transition-opacity text-gray-600 hover:text-gray-300"
                     aria-label="Rename track"
                   >
                     <PencilIcon />
@@ -1164,7 +582,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
           />
           <ClickHandler gpxPath={gpxPath} onMapClick={handleMapClick} />
           <MapSearch />
-          {gpxPath && <GpxOverlay path={gpxPath} />}
+          {gpxPath && <GpxOverlay path={gpxPath} fitOnMount={gpxFresh} />}
           {fitTarget && <FitBounds positions={fitTarget} onDone={() => setFitTarget(null)} />}
 
           {tracks.map((track) => {
@@ -1184,7 +602,7 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
                   <Marker
                     key={wp.id}
                     position={[wp.lat, wp.lon]}
-                    icon={markerIcons.get(wp.id) ?? makeMarkerIcon(i, track.color, isActive, isActive)}
+                    icon={markerIcons.get(wp.id) ?? makeMarkerIcon(i, track.color, isActive, isActive, wp.danger)}
                     draggable={isActive}
                     eventHandlers={{
                       click: () => {
@@ -1211,21 +629,34 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
           })}
         </MapContainer>
 
-        {activeTrack && activeTrack.waypoints.length === 0 && (
+        {activeTrack && activeTrack.waypoints.length === 0 && !hintDismissed && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[500]">
-            <div className="bg-black/80 border border-white/20 rounded-xl px-6 py-5 text-center max-w-xs flex flex-col items-center gap-3 pointer-events-auto">
-              <p className="text-gray-200 text-sm">
+            <div className="relative bg-black/80 border border-white/20 rounded-xl px-6 py-5 text-center max-w-xs flex flex-col items-center gap-3 pointer-events-auto">
+              <button
+                onClick={() => setHintDismissed(true)}
+                className="cursor-pointer absolute top-1.5 right-1.5 w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 transition-colors hover:text-white hover:bg-white/10"
+                aria-label="Close"
+                title="Close (Esc)"
+              >
+                ✕
+              </button>
+              <p className="text-gray-200 text-sm px-4">
                 {gpxPath
                   ? 'Click the orange line to trace it into waypoints'
-                  : 'Click the map to place your first waypoint'}
+                  : 'Click the map at each junction to place a waypoint'}
               </p>
               <span className="text-gray-600 text-xs">— or —</span>
-              <button
-                onClick={handleLoadDemo}
-                className={`px-4 py-2.5 text-sm ${BTN_PRIMARY}`}
-              >
-                Load a demo route
-              </button>
+              <div className="flex flex-col gap-2 w-full">
+                <button onClick={handleLoadDemo} className={`px-4 py-2.5 text-sm ${BTN_PRIMARY}`}>
+                  Load a demo route
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`px-4 py-2.5 text-sm ${BTN_GHOST}`}
+                >
+                  Import JSON or GPX
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1243,33 +674,44 @@ export default function MapEditor({ tracks, activeTrackId, onChange, onStartNavi
 
       {/* ── Add waypoint modal ── */}
       {pending && activeTrack && (
-        <WaypointAddModal
-          lat={pending.lat}
-          lon={pending.lon}
-          isFirst={activeTrack.waypoints.length === 0}
-          onConfirm={handleConfirm}
+        <WaypointModal
+          title="Add Waypoint"
+          subtitle={<>{pending.lat.toFixed(5)}, {pending.lon.toFixed(5)}</>}
+          initial={{ label: '', arrowType: activeTrack.waypoints.length === 0 ? 'start' : 'straight' }}
+          submitLabel="Add"
+          onSubmit={handleConfirm}
           onCancel={() => setPending(null)}
         />
       )}
 
       {/* ── Edit waypoint modal ── */}
       {editingWaypoint && (
-        <WaypointEditModal
-          waypoint={editingWaypoint.waypoint}
-          index={editingWaypoint.index}
-          onSave={handleSaveEditingWaypoint}
+        <WaypointModal
+          title={`Waypoint #${editingWaypoint.index + 1}`}
+          subtitle={<>{editingWaypoint.waypoint.lat.toFixed(5)}<br />{editingWaypoint.waypoint.lon.toFixed(5)}</>}
+          initial={editingWaypoint.waypoint}
+          submitLabel="Save"
+          onSubmit={handleSaveEditingWaypoint}
           onDelete={handleDeleteEditingWaypoint}
           onCancel={() => setEditingWaypoint(null)}
         />
       )}
 
-      {/* ── Confirm dialog ── */}
+      {sharing && activeTrack && <ShareDialog track={activeTrack} onClose={() => setSharing(false)} />}
+
       {confirmAction && (
-        <ConfirmDialog
-          action={confirmAction}
-          onCancel={() => setConfirmAction(null)}
-        />
+        <ConfirmDialog action={confirmAction} onClose={() => setConfirmAction(null)} />
       )}
+
+      {toast && <Toast toast={toast} onDismiss={dismissToast} />}
     </div>
   );
+}
+
+// Drop optional fields that are unset so stored waypoints stay minimal
+function stripEmpty(fields: WaypointFields): WaypointFields {
+  const out: WaypointFields = { label: fields.label, arrowType: fields.arrowType };
+  if (fields.danger) out.danger = fields.danger;
+  if (fields.exit && fields.arrowType === 'roundabout') out.exit = fields.exit;
+  return out;
 }

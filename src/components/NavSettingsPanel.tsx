@@ -2,12 +2,22 @@
 
 import { useRef } from 'react';
 import type { NavSettings, TriggerRadius } from '@/types/navigation';
+import { formatTrip } from '@/lib/geo';
+import { HoldBarButton } from './HoldButton';
+
+export interface TripControls {
+  meters: number;
+  canDownload: boolean;
+  onReset: () => void;
+  onDownload: () => void;
+}
 
 interface Props {
   settings: NavSettings;
   onToggle: (key: keyof NavSettings, value: boolean) => void;
   onChangeTrigger: (radius: TriggerRadius) => void;
   onClose: () => void;
+  trip?: TripControls;   // absent in preview mode
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -48,6 +58,12 @@ const icons: Record<BooleanNavKey, (active: boolean) => React.ReactNode> = {
       <path d="M15.5 8.5l-2 5-5 2 2-5 5-2z" fill={a ? '#000' : '#fff'} stroke="none" />
     </svg>
   ),
+  sunlightMode: (a) => (
+    <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke={a ? '#000' : '#fff'} strokeWidth="1.6" strokeLinecap="round">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </svg>
+  ),
   audioApproach: (a) => (
     <svg viewBox="0 0 24 24" width={26} height={26} fill="none" stroke={a ? '#000' : '#fff'} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M11 5L6 9H2v6h4l5 4V5z" />
@@ -79,12 +95,12 @@ interface ChipDef {
 const DISPLAY_CHIPS: ChipDef[] = [
   { key: 'showCounter',    label: 'Counter',   hint: '3 / 7'    },
   { key: 'showLabel',      label: 'Label',     hint: 'name'     },
-  { key: 'showOdometer',   label: 'Odometer',  hint: 'km total' },
+  { key: 'showOdometer',   label: 'Trip',      hint: 'km meter' },
   { key: 'showNextPreview',label: 'Next up',   hint: 'preview'  },
 ];
 
 const AUDIO_CHIPS: ChipDef[] = [
-  { key: 'audioApproach', label: 'Approach', hint: '150 m'      },
+  { key: 'audioApproach', label: 'Approach', hint: '~9 s ahead' },
   { key: 'audioCrossed',  label: 'Crossed',  hint: 'double beep'},
   { key: 'vibration',     label: 'Vibration',hint: 'on cross'   },
 ];
@@ -111,15 +127,55 @@ function Chip({ def, active, onToggle }: { def: ChipDef; active: boolean; onTogg
   );
 }
 
+// Full-width toggle for options that need a sentence of explanation
+function RowToggle({
+  settingKey,
+  title,
+  hint,
+  active,
+  onToggle,
+}: {
+  settingKey: BooleanNavKey;
+  title: string;
+  hint: string;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      aria-pressed={active}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition-colors ${
+        active ? 'bg-white' : 'bg-[#222]'
+      }`}
+    >
+      <span className="flex-shrink-0">{icons[settingKey](active)}</span>
+      <span className="flex-1 leading-tight">
+        <span className={`block text-sm font-semibold ${active ? 'text-black' : 'text-white'}`}>{title}</span>
+        <span className={`block text-xs mt-0.5 ${active ? 'text-black/50' : 'text-gray-600'}`}>{hint}</span>
+      </span>
+      <span
+        className={`flex-shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${
+          active ? 'bg-black/10 text-black' : 'bg-white/10 text-gray-400'
+        }`}
+      >
+        {active ? 'ON' : 'OFF'}
+      </span>
+    </button>
+  );
+}
+
 // ── Panel ─────────────────────────────────────────────────────────────────────
 
 const TRIGGER_OPTIONS: TriggerRadius[] = [15, 25, 50];
 
-export default function NavSettingsPanel({ settings, onToggle, onChangeTrigger, onClose }: Props) {
+export default function NavSettingsPanel({ settings, onToggle, onChangeTrigger, onClose, trip }: Props) {
   const startYRef = useRef<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    startYRef.current = e.touches[0].clientY;
+    // Only treat as swipe-to-close when the sheet is scrolled to the top
+    startYRef.current = (scrollRef.current?.scrollTop ?? 0) > 0 ? null : e.touches[0].clientY;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -141,7 +197,8 @@ export default function NavSettingsPanel({ settings, onToggle, onChangeTrigger, 
       onClick={onClose}
     >
       <div
-        className="bg-[#141414] border-t border-white/15 rounded-t-3xl px-5 pt-4 pb-10"
+        ref={scrollRef}
+        className="bg-[#141414] border-t border-white/15 rounded-t-3xl px-5 pt-4 pb-10 max-h-[90dvh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -152,7 +209,7 @@ export default function NavSettingsPanel({ settings, onToggle, onChangeTrigger, 
 
         {/* Display */}
         <p className="text-gray-600 text-xs uppercase tracking-widest mb-3 px-1">Display</p>
-        <div className="grid grid-cols-4 gap-2.5 mb-6">
+        <div className="grid grid-cols-4 gap-2.5 mb-3">
           {DISPLAY_CHIPS.map((def) => (
             <Chip
               key={def.key}
@@ -163,31 +220,23 @@ export default function NavSettingsPanel({ settings, onToggle, onChangeTrigger, 
           ))}
         </div>
 
-        {/* Compass — single explanatory row, off by default to keep the screen minimal */}
-        <button
-          onClick={() => onToggle('showCompass', !settings.showCompass)}
-          aria-pressed={settings.showCompass}
-          className={`w-full flex items-center gap-3 mb-6 px-4 py-3 rounded-2xl text-left transition-colors ${
-            settings.showCompass ? 'bg-white' : 'bg-[#222]'
-          }`}
-        >
-          <span className="flex-shrink-0">{icons.showCompass(settings.showCompass)}</span>
-          <span className="flex-1 leading-tight">
-            <span className={`block text-sm font-semibold ${settings.showCompass ? 'text-black' : 'text-white'}`}>
-              Compass to waypoint
-            </span>
-            <span className={`block text-xs mt-0.5 ${settings.showCompass ? 'text-black/50' : 'text-gray-600'}`}>
-              Edge tick points the way · needs movement
-            </span>
-          </span>
-          <span
-            className={`flex-shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${
-              settings.showCompass ? 'bg-black/10 text-black' : 'bg-white/10 text-gray-400'
-            }`}
-          >
-            {settings.showCompass ? 'ON' : 'OFF'}
-          </span>
-        </button>
+        <div className="flex flex-col gap-3 mb-6">
+          {/* Compass — off by default to keep the screen minimal */}
+          <RowToggle
+            settingKey="showCompass"
+            title="Compass to waypoint"
+            hint="Edge tick points the way · needs movement"
+            active={settings.showCompass}
+            onToggle={() => onToggle('showCompass', !settings.showCompass)}
+          />
+          <RowToggle
+            settingKey="sunlightMode"
+            title="Sunlight mode"
+            hint="Black on white — easier to read in direct sun"
+            active={settings.sunlightMode}
+            onToggle={() => onToggle('sunlightMode', !settings.sunlightMode)}
+          />
+        </div>
 
         {/* Audio & Haptics */}
         <p className="text-gray-600 text-xs uppercase tracking-widest mb-3 px-1">Audio & Haptics</p>
@@ -221,7 +270,35 @@ export default function NavSettingsPanel({ settings, onToggle, onChangeTrigger, 
             );
           })}
         </div>
-        <p className="text-gray-700 text-xs mt-2 px-1">Distance at which a waypoint is auto-crossed</p>
+        <p className="text-gray-700 text-xs mt-2 px-1">
+          Distance at which a waypoint is auto-crossed. All distances are straight-line, not along the road.
+        </p>
+
+        {/* Trip meter & recorded ride */}
+        {trip && (
+          <>
+            <p className="text-gray-600 text-xs uppercase tracking-widest mt-6 mb-3 px-1">
+              Trip · <span className="tabular-nums normal-case tracking-normal text-gray-400">{formatTrip(trip.meters)}</span>
+            </p>
+            <div className="flex gap-2">
+              <HoldBarButton
+                onComplete={trip.onReset}
+                holdMs={900}
+                label="Hold to reset trip meter"
+                className="flex-1 py-3 rounded-xl text-sm font-semibold bg-[#222] text-gray-300"
+              >
+                Hold to reset trip
+              </HoldBarButton>
+              <button
+                onClick={trip.onDownload}
+                disabled={!trip.canDownload}
+                className="flex-1 py-3 rounded-xl text-sm font-semibold bg-[#222] text-gray-300 hover:bg-[#2a2a2a] disabled:opacity-35 disabled:pointer-events-none"
+              >
+                Ride as GPX
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

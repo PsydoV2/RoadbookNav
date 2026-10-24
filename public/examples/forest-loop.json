@@ -1,0 +1,220 @@
+{
+  "format": "roadbook-nav",
+  "version": 1,
+  "exportedAt": "2026-10-24T21:51:43.385Z",
+  "tracks": [
+    {
+      "name": "Forest Loop (example)",
+      "color": "#ef4444",
+      "waypoints": [
+        {
+          "id": "42e55a51-1163-4c33-8c3c-87cc1e651e7e",
+          "lat": 50.01959049254841,
+          "lon": 9.548293948173525,
+          "label": "",
+          "arrowType": "start"
+        },
+        {
+          "id": "0ce9c95d-d5ca-4056-9b3f-6e8475da9920",
+          "lat": 50.020547989680445,
+          "lon": 9.549710154533388,
+          "label": "",
+          "arrowType": "slight-left"
+        },
+        {
+          "id": "2991b8dd-3657-4ef8-898f-75120db2de60",
+          "lat": 50.021612362330146,
+          "lon": 9.550466537475588,
+          "label": "",
+          "arrowType": "straight"
+        },
+        {
+          "id": "58f8036d-ca8f-4c92-850b-2bb9c2ab51e3",
+          "lat": 50.02405695623748,
+          "lon": 9.551609158515932,
+          "label": "",
+          "arrowType": "slight-right"
+        },
+        {
+          "id": "7a064ed6-5947-4f58-aab7-b102a2ba4301",
+          "lat": 50.0258604846557,
+          "lon": 9.55359935760498,
+          "label": "",
+          "arrowType": "slight-left"
+        },
+        {
+          "id": "7e2e5891-210a-4423-b9b7-e689d705d727",
+          "lat": 50.02793050825569,
+          "lon": 9.554489850997927,
+          "label": "",
+          "arrowType": "slight-left",
+          "danger": 1
+        },
+        {
+          "id": "784c7d0c-7a73-43dc-949d-d50b53daceff",
+          "lat": 50.03144932631221,
+          "lon": 9.554806351661684,
+          "label": "",
+          "arrowType": "slight-left",
+          "danger": 1
+        },
+        {
+          "id": "bfa5e765-6095-4bfd-9799-6e688db9c410",
+          "lat": 50.04218161969804,
+          "lon": 9.562697410583498,
+          "label": "",
+          "arrowType": "slight-left",
+          "danger": 2
+        },
+        {
+          "id": "845dec53-1262-4afe-b0e0-456977adda3c",
+          "lat": 50.04466189415262,
+          "lon": 9.562547206878664,
+          "label": "",
+          "arrowType": "keep-left"
+        },
+        {
+          "id": "a06ab16e-efe0-478e-b78d-3c2a6b6dcb9a",
+          "lat": 50.04528924667124,
+          "lon": 9.56214487552643,
+          "label": "",
+          "arrowType": "right"
+        },
+        {
+          "id": "ad738348-1122-4ade-9b33-d724787559d9",
+          "lat": 50.04564773014338,
+          "lon": 9.562268257141115,
+          "label": "",
+          "arrowType": "keep-right"
+        },
+        {
+          "id": "b9a74cdb-a8d2-4526-a5a7-56eb90e5fb86",
+          "lat": 50.04795587700943,
+          "lon": 9.56752911931649,
+          "label": "Crossing",
+          "arrowType": "straight",
+          "danger": 2
+        },
+        {
+          "id": "3618841b-a561-41c0-ac73-d63183e1af56",
+          "lat": 50.04874704759875,
+          "lon": 9.568029642105104,
+          "label": "",
+          "arrowType": "slight-left"
+        },
+        {
+          "id": "367f017e-facb-447c-a03e-aad77f6e4e0e",
+          "lat": 50.05068006100312,
+          "lon": 9.566575884819033,
+          "label": "",
+          "arrowType": "slight-left"
+        },
+        {
+          "id": "06e12c02-f539-4ee6-928e-0defa272c059",
+          "lat": 50.05126597639917,
+          "lon": 9.565084576606752,
+          "label": "",
+          "arrowType": "slight-right"
+        },
+        {
+          "id": "9059ee1d-5168-4bb2-b194-810d0f32e11c",
+          "lat": 50.05301518177061,
+          "lon": 9.562552571296694,
+          "label": "",
+          "arrowType": "slight-left"
+        },
+        {
+          "id": "76093ed7-02fd-4434-92cf-86cc2726c898",
+          "lat": 50.053313220333294,
+          "lon": 9.555262327194214,
+          "label": "",
+          "arrowType": "slight-right"
+        },
+        {
+          "id": "3c970c9f-4c21-4685-84cb-e3becc406013",
+          "lat": 50.056073551066575,
+          "lon": 9.550847411155702,
+          "label": "",
+          "arrowType": "left"
+        },
+        {
+          "id": "fa106762-2631-4ed2-af35-9a43e62bf56f",
+          "lat": 50.05688978127535,
+          "lon": 9.548186659906813,
+          "label": "",
+          "arrowType": "slight-right"
+        },
+        {
+          "id": "5dff17f9-4edd-4570-a48e-56166840818a",
+          "lat": 50.06046377891292,
+          "lon": 9.547500014305117,
+          "label": "",
+          "arrowType": "slight-left"
+        },
+        {
+          "id": "1f416394-f974-4c07-8450-c582f27fe4f6",
+          "lat": 50.06277877992367,
+          "lon": 9.546013052641996,
+          "label": "",
+          "arrowType": "right"
+        },
+        {
+          "id": "9821dd79-0088-4488-b294-66707bc08cf7",
+          "lat": 50.06420712597799,
+          "lon": 9.553102338978126,
+          "label": "",
+          "arrowType": "left"
+        },
+        {
+          "id": "2c825529-67fe-4718-ba45-20ec9382cf74",
+          "lat": 50.06551271210269,
+          "lon": 9.554167985916138,
+          "label": "",
+          "arrowType": "slight-right"
+        },
+        {
+          "id": "1f7f92c1-7189-41cd-aa6a-193bd538a8ca",
+          "lat": 50.06657050294362,
+          "lon": 9.55450057950381,
+          "label": "",
+          "arrowType": "slight-left"
+        },
+        {
+          "id": "26e4f0e6-c2b4-4145-acb1-a37488a7f4ac",
+          "lat": 50.06839883955091,
+          "lon": 9.554236456978359,
+          "label": "",
+          "arrowType": "slight-left"
+        },
+        {
+          "id": "614eff6c-4332-4348-8847-93c24809d395",
+          "lat": 50.06982341493138,
+          "lon": 9.55219715525523,
+          "label": "",
+          "arrowType": "slight-right"
+        },
+        {
+          "id": "183826f7-6a7f-4c86-a687-1d1762bec534",
+          "lat": 50.071263505276605,
+          "lon": 9.550180134076031,
+          "label": "",
+          "arrowType": "slight-left"
+        },
+        {
+          "id": "31793c78-e2eb-48b4-a525-a1c49b6484c3",
+          "lat": 50.07168725568415,
+          "lon": 9.54844742705241,
+          "label": "",
+          "arrowType": "slight-right"
+        },
+        {
+          "id": "a05b116c-4975-40cd-91ce-2c6e8932c315",
+          "lat": 50.07180747992419,
+          "lon": 9.547868069905194,
+          "label": "",
+          "arrowType": "finish"
+        }
+      ]
+    }
+  ]
+}

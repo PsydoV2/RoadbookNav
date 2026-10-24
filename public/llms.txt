@@ -1,24 +1,32 @@
 # Roadbook Nav
 
-> Free, offline-first digital roadbook for motorcycle rally, enduro and trail riding. Plan waypoints on a map at home, export one JSON file, and navigate on your phone with one large direction arrow and a live distance countdown — no mobile signal, no account, no tracking.
+> Free, offline-first digital roadbook for motorcycle rally, enduro and trail riding. Plan waypoints on a map at home, send the route to your phone with a QR code, and navigate with one large direction arrow and a live distance countdown — no mobile signal, no account, no tracking.
 
 Roadbook Nav is a progressive web app (PWA) that runs in any modern browser and can be installed to the home screen on Android and iOS.
 
 ## Key facts
 
-- Navigation runs fully offline once the app is installed: no map tiles, no network requests while riding. Distance is computed from GPS with the Haversine formula.
+- Navigation runs fully offline once the app is installed: no map tiles, no network requests while riding. Distance is computed from GPS with the Haversine formula (straight-line distance to the next waypoint).
 - The route editor needs internet (OpenStreetMap tiles) and is meant to be used before the ride.
-- Each waypoint has a turn arrow (straight, slight/normal/sharp left or right, U-turn, start, finish) and an optional label.
-- Auto-advance trigger radius: 15, 25 (default) or 50 m.
-- Feedback at each waypoint: audio cues and vibration (vibration is not available on iOS Safari).
-- GPX files can be loaded as an overlay; waypoint clicks snap onto the track.
-- Multiple route variants per device; JSON import and export.
+- Each waypoint has a symbol (start, finish, straight, slight/normal/sharp left or right, keep left/right at a fork, roundabout with exit number, U-turn), an optional label and an optional hazard mark (!, !!, !!!).
+- Auto-advance trigger radius: 15, 25 (default) or 50 m. If a waypoint is narrowly missed, it still counts as passed once the rider clearly moves away.
+- Approach warning about 9 seconds before each waypoint, based on current speed; hazard waypoints get a distinct warning sound.
+- Rally-style trip meter from GPS with ±10 m correction, shown next to the planned route distance.
+- Progress is saved during the ride; after an interruption the app offers to resume at the same waypoint.
+- The ridden track can be downloaded as GPX after the ride.
+- Sunlight mode (black on white), landscape layout, large glove-friendly buttons, hold-to-skip.
+- Preview mode steps through a roadbook without GPS.
+- Routes can be shared as a link or QR code; the route is compressed into the link itself, nothing is uploaded.
+- Import: Roadbook Nav JSON and GPX (as overlay, plus roadbook waypoints exported from Roadbook Nav). Export: JSON and GPX.
 - Data stays on the device (localStorage and exported files). No account, no server, no location sharing.
 - Not a turn-by-turn road navigator and does not show a moving map while navigating.
 - Price: free.
 
 ## Pages
 
-- [Home](https://roadbook.sfalter.de/): overview, how it works, FAQ
+- [Home](https://roadbook.sfalter.de/): overview, how it works, example route, FAQ
 - [App: route editor and navigation](https://roadbook.sfalter.de/app/)
+- [Example route in the app](https://roadbook.sfalter.de/app/?example=forest-loop)
 - [Guide: what a tulip roadbook is and how to make a digital one](https://roadbook.sfalter.de/guide/tulip-roadbook/)
+- [Guide: how to plan a roadbook for an enduro or trail ride](https://roadbook.sfalter.de/guide/plan-enduro-roadbook/)
+- [Guide: using your phone as a motorcycle roadbook device](https://roadbook.sfalter.de/guide/phone-as-roadbook/)

@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { LAST_UPDATED, SITE_URL } from "@/lib/site";
+import { GUIDES, LAST_UPDATED, SITE_URL } from "@/lib/site";
 
 // Static export: emitted as /sitemap.xml at build time.
 export const dynamic = "force-static";
@@ -14,12 +14,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 1,
     },
-    {
-      url: `${SITE_URL}/guide/tulip-roadbook/`,
+    ...GUIDES.map((g) => ({
+      url: `${SITE_URL}${g.path}`,
       lastModified,
-      changeFrequency: "yearly",
+      changeFrequency: "yearly" as const,
       priority: 0.7,
-    },
+    })),
     {
       url: `${SITE_URL}/app/`,
       lastModified,
